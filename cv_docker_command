@@ -1,1 +1,1 @@
-docker run -d --shm-size=4gb --name cv_container --rm -v `pwd`:/workspace therealspring/invest-env:0.1.0 "python global_cv_analysis.py DASGUPTA_CV_LULC_INPUTS.txt --shore_point_sample_distance 2000 --dasgupta_mode" && touch log.out && tail -f log.out
+docker run -d --shm-size=4gb --name cv_container --rm -v `pwd`:/workspace therealspring/invest-env:0.1.0 "python global_cv_analysis.py DASGUPTA_CV_LULC_INPUTS.txt --shore_point_sample_distance 2000 --dasgupta_mode" && touch log.out
