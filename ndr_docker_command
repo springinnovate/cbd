@@ -1,0 +1,1 @@
+docker run -it -d --name cbd_ndr_runs --rm --shm-size=4gb -v `pwd`:/usr/local/workspace therealspring/inspring:latest ndr_plus_scenario.py && touch log.out 
