@@ -1,0 +1,5 @@
+# first run make_poll_suff in normal pollination_sufficiency repo on this map:
+# gsutil cp gs://ipbes-ndr-ecoshard-data/ESACCI_PNV_iis_OA_ESAclasses_max_ESAresproj_md5_e6575db589abb52c683d44434d428d80.tif .
+docker run -d --name pollsuff_container --rm -v `pwd`:/usr/local/workspace therealspring/inspring:latest make_poll_suff.py ./ESACCI_PNV*.tif && docker logs pollsuff_container -f
+#then run resulting outputs on the updated realized_pollination code in this repo
+docker run -d --name pollsuff_container --rm -v `pwd`:/usr/local/workspace therealspring/inspring:latest realized_pollination.py ./ESACCI_PNV*.tif && docker logs pollsuff_container -f
