@@ -3,9 +3,10 @@ import glob
 import logging
 import multiprocessing
 import os
+import pathlib
 import shutil
 import subprocess
-import sys
+import sqlite3
 import threading
 import urllib
 import zipfile
@@ -16,6 +17,7 @@ from osgeo import osr
 import ecoshard
 import pandas
 import pygeoprocessing
+import retrying
 import taskgraph
 
 gdal.SetCacheMax(2**27)
@@ -23,7 +25,9 @@ logging.getLogger('taskgraph').setLevel(logging.INFO)
 
 WORKSPACE_DIR = 'cbd_workspace'
 ECOSHARD_DIR = os.path.join(WORKSPACE_DIR, 'ecoshards')
-
+WORK_STATUS_DATABASE_PATH = os.path.join(WORKSPACE_DIR, 'work_status.db')
+COMPUTED_STATUS = 'computed'  # use when computed but not stitched
+COMPLETE_STATUS = 'complete'  # use when stitched and deleted
 USE_AG_LOAD_ID = 999
 
 # All links in this dict is an ecoshard that will be downloaded to
@@ -101,7 +105,6 @@ SCENARIOS = {
     },
 }
 
-
 def _setup_logger(name, log_file, level):
     """Create arbitrary logger to file.
 
@@ -124,6 +127,129 @@ def _setup_logger(name, log_file, level):
 
 LOGGER = _setup_logger(__name__, 'log.out', level=logging.INFO)
 DEBUG_LOGGER = _setup_logger('debugger', 'debug_log.out', level=logging.DEBUG)
+
+
+@retrying.retry(
+    wait_exponential_multiplier=500, wait_exponential_max=3200,
+    stop_max_attempt_number=100)
+def _execute_sqlite(
+        sqlite_command, database_path, argument_list=None,
+        mode='read_only', execute='execute', fetch=None):
+    """Execute SQLite command and attempt retries on a failure.
+
+    Args:
+        sqlite_command (str): a well formatted SQLite command.
+        database_path (str): path to the SQLite database to operate on.
+        argument_list (list): ``execute == 'execute'`` then this list is passed
+            to the internal sqlite3 ``execute`` call.
+        mode (str): must be either 'read_only' or 'modify'.
+        execute (str): must be either 'execute' or 'script'.
+        fetch (str): if not ``None`` can be either 'all' or 'one'.
+            If not None the result of a fetch will be returned by this
+            function.
+
+    Returns:
+        result of fetch if ``fetch`` is not None.
+
+    """
+    cursor = None
+    connection = None
+    try:
+        if mode == 'read_only':
+            ro_uri = r'%s?mode=ro' % pathlib.Path(
+                os.path.abspath(database_path)).as_uri()
+            LOGGER.debug(
+                '%s exists: %s', ro_uri, os.path.exists(os.path.abspath(
+                    database_path)))
+            connection = sqlite3.connect(ro_uri, uri=True)
+        elif mode == 'modify':
+            connection = sqlite3.connect(database_path)
+        else:
+            raise ValueError('Unknown mode: %s' % mode)
+
+        if execute == 'execute':
+            if argument_list is None:
+                cursor = connection.execute(sqlite_command)
+            else:
+                cursor = connection.execute(sqlite_command, argument_list)
+        elif execute == 'script':
+            cursor = connection.executescript(sqlite_command)
+        elif execute == 'executemany':
+            cursor = connection.executesmany(sqlite_command, argument_list)
+        else:
+            raise ValueError('Unknown execute mode: %s' % execute)
+
+        result = None
+        payload = None
+        if fetch == 'all':
+            payload = (cursor.fetchall())
+        elif fetch == 'one':
+            payload = (cursor.fetchone())
+        elif fetch is not None:
+            raise ValueError('Unknown fetch mode: %s' % fetch)
+        if payload is not None:
+            result = list(payload)
+        cursor.close()
+        connection.commit()
+        connection.close()
+        cursor = None
+        connection = None
+        return result
+    except sqlite3.OperationalError:
+        LOGGER.warning(
+            'TaskGraph database is locked because another process is using '
+            'it, waiting for a bit of time to try again')
+        raise
+    except Exception:
+        LOGGER.exception('Exception on _execute_sqlite: %s', sqlite_command)
+        raise
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None:
+            connection.commit()
+            connection.close()
+
+
+def _create_work_table_schema(database_path):
+    """Create database exists and/or ensures it is compatible and recreate.
+
+    Args:
+        database_path (str): path to an existing database or desired
+            location of a new database.
+
+    Returns:
+        None.
+
+    """
+    sql_create_table_script = (
+        """
+        CREATE TABLE work_status (
+            watershed_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            PRIMARY KEY (watershed_id, status)
+        );
+        CREATE TABLE global_variables (
+            watershed_basename TEXT NOT NULL,
+            watershed_count INT NOT NULL,
+            PRIMARY KEY (watershed_basename)
+        );
+        """)
+
+    # create the base table
+    _execute_sqlite(
+        sql_create_table_script, database_path,
+        mode='modify', execute='script')
+
+
+def _set_work_status(database_path, watershed_id_status_list):
+    sql_statement = '''
+        INSERT OR REPLACE INTO work_status(watershed_id, status)
+        VALUES(?, ?);
+    '''
+    _execute_sqlite(
+        sql_statement, database_path, argument_list=watershed_id_status_list,
+        mode='modify', execute='executemany')
 
 
 def create_empty_wgs84_raster(cell_size, nodata, target_path):
@@ -155,12 +281,13 @@ def stitch_worker(
         export_raster_list = []
         modified_load_raster_list = []
         workspace_list = []
-
+        status_update_list = []
         while True:
             payload = stitch_queue.get()
             if payload is not None:
                 (export_raster_path, modified_load_raster_path,
-                 workspace_dir) = payload
+                 workspace_dir, watershed_id) = payload
+                status_update_list.append((watershed_id, COMPLETE_STATUS))
 
                 export_raster_list.append((export_raster_path, 1))
                 modified_load_raster_list.append((modified_load_raster_path, 1))
@@ -174,7 +301,7 @@ def stitch_worker(
                     (stitch_export_raster_path, export_raster_list),
                     (stitch_modified_load_raster_path,
                      modified_load_raster_list)]:
-                export_worker = multiprocessing.Process(
+                stitch_worker = threading.Thread(
                     target=pygeoprocessing.stitch_rasters,
                     args=(
                         raster_list,
@@ -183,8 +310,8 @@ def stitch_worker(
                     kwargs={
                         'overlap_algorithm': 'add',
                         'area_weight_m2_to_wgs84': True})
-                export_worker.start()
-                worker_list.append(export_worker)
+                stitch_worker.start()
+                worker_list.append(stitch_worker)
             for worker in worker_list:
                 worker.join()
             for workspace_dir in workspace_list:
@@ -192,11 +319,23 @@ def stitch_worker(
             export_raster_list = []
             modified_load_raster_list = []
             workspace_list = []
+
+            _set_work_status(
+                WORK_STATUS_DATABASE_PATH,
+                status_update_list)
+            status_update_list = []
+
+
             if payload is None:
                 break
     except:
         LOGGER.exception('something bad happened on ndr stitcher')
         raise
+
+
+def _create_watershed_id(watershed_path, watershed_fid):
+    """Create unique ID from path and FID."""
+    return f'{os.path.basename(os.path.splitext(watershed_path)[0])}_{watershed_fid}'
 
 
 def ndr_plus_and_stitch(
@@ -243,9 +382,13 @@ def ndr_plus_and_stitch(
             target_export_raster_path,
             target_modified_load_raster_path,
             workspace_dir)
+        watershed_id = _create_watershed_id(watershed_path, watershed_fid)
+        _set_work_status(
+            WORK_STATUS_DATABASE_PATH,
+            [(watershed_id, COMPUTED_STATUS)])
         stitch_queue.put(
             (target_export_raster_path, target_modified_load_raster_path,
-             workspace_dir))
+             workspace_dir, watershed_id))
     except:
         LOGGER.exception(
             f'this exception happened on {watershed_path} {watershed_fid} but skipping with no problem')
@@ -318,6 +461,9 @@ def main():
     """Entry point."""
     DEBUG_LOGGER.debug('starting script')
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
+    if not os.path.exists(WORK_STATUS_DATABASE_PATH):
+        _create_work_table_schema()
+
     task_graph = taskgraph.TaskGraph(
         WORKSPACE_DIR, multiprocessing.cpu_count())
     os.makedirs(ECOSHARD_DIR, exist_ok=True)
@@ -410,11 +556,16 @@ def main():
         stitch_worker_list.append(stitch_worker_thread)
 
         for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
+            # TODO: this is for debugging
+            if watersheds_scheduled >= 16:
+                break
             watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
             watershed_layer = watershed_vector.GetLayer()
             watershed_basename = os.path.splitext(os.path.basename(watershed_path))[0]
             for watershed_feature in watershed_layer:
-
+                # TODO: this is for debugging
+                if watersheds_scheduled >= 16:
+                    break
                 if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
                     continue
 
