@@ -157,6 +157,7 @@ def _execute_sqlite(
         result of fetch if ``fetch`` is not None.
 
     """
+    LOGGER.debug(f'executing {sqlite_command}')
     cursor = None
     connection = None
     try:
