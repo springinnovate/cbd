@@ -1,12 +1,13 @@
 """Tracer for NDR watershed processing."""
+import collections
 import glob
 import logging
 import multiprocessing
 import os
 import pathlib
-import shutil
 import subprocess
 import sqlite3
+import time
 import threading
 import urllib
 import zipfile
@@ -130,6 +131,7 @@ LOGGER = _setup_logger(__name__, 'log.out', level=logging.DEBUG)
 DEBUG_LOGGER = _setup_logger('debugger', 'debug_log.out', level=logging.DEBUG)
 PYGEOPROCESSING_LOGGER = _setup_logger('pygeoprocessing', 'pygeoprocessinglog.out', level=logging.INFO)
 INSPRING_LOGGER = _setup_logger('inspring', 'inspringlog.out', level=logging.DEBUG)
+REPORT_WATERSHED_LOGGER = _setup_logger('report_watershed', 'report_watershed.out', level=logging.DEBUG)
 
 
 @retrying.retry(
@@ -289,11 +291,13 @@ def stitch_worker(
         modified_load_raster_list = []
         workspace_list = []
         status_update_list = []
+        watershed_process_count = collections.defaultdict(int)
         while True:
             payload = stitch_queue.get()
             if payload is not None:
                 (export_raster_path, modified_load_raster_path,
-                 workspace_dir, watershed_id) = payload
+                 workspace_dir, watershed_basename, watershed_id) = payload
+                watershed_process_count[watershed_basename] += 1
                 status_update_list.append((watershed_id, COMPLETE_STATUS))
 
                 export_raster_list.append((export_raster_path, 1))
@@ -328,9 +332,27 @@ def stitch_worker(
             for workspace_dir in workspace_list:
                 #shutil.rmtree(workspace_dir)
                 LOGGER.debug(f'would have removed {workspace_dir} but saving it')
+
+            for watershed_basename, count in watershed_process_count.items():
+                current_count = _execute_sqlite(
+                    '''SELECT watershed_count
+                    FROM global_variables
+                    WHERE watershed_basename=?''',
+                    WORK_STATUS_DATABASE_PATH, mode='read_only',
+                    execute='execute', fetch='one',
+                    argument_list=[watershed_basename])
+                _execute_sqlite(
+                    '''UPDATE global_variables
+                    SET watershed_count=?
+                    WHERE watershed_basename=?''',
+                    WORK_STATUS_DATABASE_PATH, mode='read_only',
+                    execute='execute', fetch='one',
+                    argument_list=[current_count-count, watershed_basename])
+
             export_raster_list = []
             modified_load_raster_list = []
             workspace_list = []
+            watershed_process_count = collections.defaultdict(int)
 
             _set_work_status(
                 WORK_STATUS_DATABASE_PATH,
@@ -472,6 +494,24 @@ def unzip_and_build_dem_vrt(
     LOGGER.info(f'all done building {target_vrt_path}')
 
 
+def _report_watershed_count():
+    try:
+        while True:
+            time.sleep(15)
+            sql_statement = 'SELECT * FROM global_variables'
+            watershed_basename_count_list = _execute_sqlite(
+                sql_statement, WORK_STATUS_DATABASE_PATH,
+                mode='read_only', execute='fetchall')
+            REPORT_WATERSHED_LOGGER.info(
+                'watershed status:\n'+'\n'.join([
+                    str(v) for v in watershed_basename_count_list]))
+            watershed_feature = None
+            watershed_layer = None
+            watershed_vector = None
+    except Exception:
+        REPORT_WATERSHED_LOGGER.exception('something bad happened')
+
+
 def main():
     """Entry point."""
     DEBUG_LOGGER.debug('starting script')
@@ -521,20 +561,33 @@ def main():
     task_graph.join()
     DEBUG_LOGGER.debug('done with downloads')
 
-    total_watersheds = 0
     for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
+        watershed_basename = os.path.basename(
+            os.path.splitext(watershed_path)[0])
+        watersheds_to_process = 0
         watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
         watershed_layer = watershed_vector.GetLayer()
         for watershed_feature in watershed_layer:
             if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
                 continue
-            total_watersheds += 1
+            watersheds_to_process += 1
+        sql_statement = '''
+            INSERT OR REPLACE INTO global_variables(watershed_basename, count)
+            VALUES(?, ?);
+        '''
+        _execute_sqlite(
+            sql_statement, WORK_STATUS_DATABASE_PATH,
+            argument_list=[watershed_basename, watersheds_to_process],
+            mode='modify', execute='executemany')
         watershed_feature = None
         watershed_layer = None
         watershed_vector = None
 
-    LOGGER.info(f'there are {total_watersheds} watersheds to process')
-    DEBUG_LOGGER.debug(f'there are {total_watersheds} watersheds to process')
+    LOGGER.info(f'starting watershed status logger')
+    report_watershed_thread = threading.Thread(
+        target=_report_watershed_count)
+    report_watershed_thread.daemon = True
+    report_watershed_thread.start()
 
     manager = multiprocessing.Manager()
     stitch_worker_list = []
