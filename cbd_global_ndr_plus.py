@@ -580,7 +580,7 @@ def main():
         _execute_sqlite(
             sql_statement, WORK_STATUS_DATABASE_PATH,
             argument_list=[watershed_basename, watersheds_to_process],
-            mode='modify', execute='executemany')
+            mode='modify', execute='execute')
         watershed_feature = None
         watershed_layer = None
         watershed_vector = None
