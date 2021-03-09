@@ -203,8 +203,8 @@ def _execute_sqlite(
         return result
     except sqlite3.OperationalError:
         LOGGER.warning(
-            'TaskGraph database is locked because another process is using '
-            'it, waiting for a bit of time to try again')
+            f'{database_path} database is locked because another process is '
+            'using it, waiting for a bit of time to try again')
         raise
     except Exception:
         LOGGER.exception('Exception on _execute_sqlite: %s', sqlite_command)
