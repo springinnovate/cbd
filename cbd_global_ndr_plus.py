@@ -105,6 +105,7 @@ SCENARIOS = {
     },
 }
 
+
 def _setup_logger(name, log_file, level):
     """Create arbitrary logger to file.
 
@@ -325,10 +326,9 @@ def stitch_worker(
                 status_update_list)
             status_update_list = []
 
-
             if payload is None:
                 break
-    except:
+    except Exception:
         LOGGER.exception('something bad happened on ndr stitcher')
         raise
 
@@ -357,13 +357,13 @@ def ndr_plus_and_stitch(
         stitch_queue):
     """Invoke ``inspring.ndr_plus`` with stitch.
 
-        Same parameter list as ``inspring.ndr_plus`` with additional args:
+    Same parameter list as ``inspring.ndr_plus`` with additional args:
 
-        stitch_queue (queue): places export, load, and workspace path here to
-            stitch globally and delete the workspace when complete.
+    stitch_queue (queue): places export, load, and workspace path here to
+        stitch globally and delete the workspace when complete.
 
-        Return:
-            ``None``
+    Return:
+        ``None``
     """
     try:
         ndr_plus(
@@ -389,7 +389,7 @@ def ndr_plus_and_stitch(
         stitch_queue.put(
             (target_export_raster_path, target_modified_load_raster_path,
              workspace_dir, watershed_id))
-    except:
+    except Exception:
         LOGGER.exception(
             f'this exception happened on {watershed_path} {watershed_fid} but skipping with no problem')
 
@@ -402,6 +402,8 @@ def load_biophysical_table(biophysical_table_path, lulc_field_id):
             codes to 'eff_n' and 'load_n' values. These value can have
             the field 'use raster' in which case they will be replaced with
             a custom raster layer for the lulc code.
+        lulc_field_id (str): this is the name of the field that references
+            the lulc id.
 
     Return:
         A tuple of:
