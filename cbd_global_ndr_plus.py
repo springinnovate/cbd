@@ -471,7 +471,7 @@ def main():
         _create_work_table_schema(WORK_STATUS_DATABASE_PATH)
 
     task_graph = taskgraph.TaskGraph(
-        WORKSPACE_DIR, multiprocessing.cpu_count())
+        WORKSPACE_DIR, -1)
     os.makedirs(ECOSHARD_DIR, exist_ok=True)
     ecoshard_path_map = {}
     LOGGER.info('scheduling downloads')
