@@ -126,8 +126,10 @@ def _setup_logger(name, log_file, level):
     return logger
 
 
-LOGGER = _setup_logger(__name__, 'log.out', level=logging.INFO)
+LOGGER = _setup_logger(__name__, 'log.out', level=logging.DEBUG)
 DEBUG_LOGGER = _setup_logger('debugger', 'debug_log.out', level=logging.DEBUG)
+PYGEOPROCESSING_LOGGER = _setup_logger('pygeoprocessing', 'pygeoprocessinglog.out', level=logging.INFO)
+INSPRING_LOGGER = _setup_logger('inspring', 'inspringlog.out', level=logging.DEBUG)
 
 
 @retrying.retry(
@@ -324,7 +326,8 @@ def stitch_worker(
             for worker in worker_list:
                 worker.join()
             for workspace_dir in workspace_list:
-                shutil.rmtree(workspace_dir)
+                #shutil.rmtree(workspace_dir)
+                LOGGER.debug(f'would have removed {workspace_dir} but saving it')
             export_raster_list = []
             modified_load_raster_list = []
             workspace_list = []
