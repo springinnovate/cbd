@@ -244,13 +244,17 @@ def _create_work_table_schema(database_path):
 
 
 def _set_work_status(database_path, watershed_id_status_list):
-    sql_statement = '''
-        INSERT OR REPLACE INTO work_status(watershed_id, status)
-        VALUES(?, ?);
-    '''
-    _execute_sqlite(
-        sql_statement, database_path, argument_list=watershed_id_status_list,
-        mode='modify', execute='executemany')
+    try:
+        sql_statement = '''
+            INSERT OR REPLACE INTO work_status(watershed_id, status)
+            VALUES(?, ?);
+        '''
+        _execute_sqlite(
+            sql_statement, database_path, argument_list=watershed_id_status_list,
+            mode='modify', execute='executemany')
+    except Exception as e:
+        print(f'{e} happened on work status')
+        raise
 
 
 def create_empty_wgs84_raster(cell_size, nodata, target_path):
