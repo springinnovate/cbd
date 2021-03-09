@@ -19,15 +19,8 @@ import pygeoprocessing
 import taskgraph
 
 gdal.SetCacheMax(2**27)
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format=(
-        '%(asctime)s (%(relativeCreated)d) %(processName)s %(levelname)s '
-        '%(name)s [%(funcName)s:%(lineno)d] %(message)s'),
-    filename='log.out')
-LOGGER = logging.getLogger(__name__)
 logging.getLogger('taskgraph').setLevel(logging.INFO)
+
 WORKSPACE_DIR = 'cbd_workspace'
 ECOSHARD_DIR = os.path.join(WORKSPACE_DIR, 'ecoshards')
 
@@ -107,6 +100,30 @@ SCENARIOS = {
         'biophysical_table_id': 'esa_aries_rs3',
     },
 }
+
+
+def _setup_logger(name, log_file, level):
+    """Create arbitrary logger to file.
+
+    Args:
+        name (str): arbitrary name of logger
+        log_file (str): path to file to log to
+        level (logging.LEVEL): the log level to report.
+
+    Returns:
+        logger object
+    """
+    handler = logging.FileHandler(log_file)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    handler.setFormatter(formatter)
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.addHandler(handler)
+    return logger
+
+
+LOGGER = _setup_logger(__name__, 'log.out', level=logging.INFO)
+DEBUG_LOGGER = _setup_logger(__name__, 'debug_log.out', level=logging.DEBUG)
 
 
 def create_empty_wgs84_raster(cell_size, nodata, target_path):
@@ -299,12 +316,14 @@ def unzip_and_build_dem_vrt(
 
 def main():
     """Entry point."""
+    DEBUG_LOGGER.debug('starting script')
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     task_graph = taskgraph.TaskGraph(
         WORKSPACE_DIR, multiprocessing.cpu_count())
     os.makedirs(ECOSHARD_DIR, exist_ok=True)
     ecoshard_path_map = {}
     LOGGER.info('scheduling downloads')
+    DEBUG_LOGGER.debug('starting downloads')
     for ecoshard_id, ecoshard_url in ECOSHARDS.items():
         ecoshard_path = os.path.join(
             ECOSHARD_DIR, os.path.basename(ecoshard_url))
@@ -337,13 +356,30 @@ def main():
         args=(ecoshard_path_map[WATERSHED_ID], ECOSHARD_DIR),
         target_path_list=[expected_watershed_path],
         task_name='unzip watersheds')
-
+    DEBUG_LOGGER.debug('waiting for downloads and data to construct')
     task_graph.join()
+    DEBUG_LOGGER.debug('done with downloads')
+
+    total_watersheds = 0
+    for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
+        watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
+        watershed_layer = watershed_vector.GetLayer()
+        for watershed_feature in watershed_layer:
+            if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
+                continue
+            total_watersheds += 1
+        watershed_feature = None
+        watershed_layer = None
+        watershed_vector = None
+
+    LOGGER.info(f'there are {total_watersheds} watersheds to process')
+    DEBUG_LOGGER.debug(f'there are {total_watersheds} watersheds to process')
 
     manager = multiprocessing.Manager()
     stitch_worker_list = []
     stitch_queue_list = []
     target_raster_list = []
+    watersheds_processed = 0
     for scenario_id, scenario_vars in SCENARIOS.items():
         eff_n_lucode_map, load_n_lucode_map = load_biophysical_table(
             ecoshard_path_map[scenario_vars['biophysical_table_id']],
@@ -368,7 +404,7 @@ def main():
             target=stitch_worker,
             args=(
                 target_export_raster_path, target_modified_load_raster_path,
-                stitch_queue))
+                stitch_queue, watersheds_processed))
         stitch_worker_thread.start()
         stitch_worker_list.append(stitch_worker_thread)
 
