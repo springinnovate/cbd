@@ -374,6 +374,8 @@ def ndr_plus_and_stitch(
         ``None``
     """
     try:
+        watershed_id = _create_watershed_id(watershed_path, watershed_fid)
+        LOGGER.debug(f'{watershed_id} about to be run')
         ndr_plus(
             watershed_path, watershed_fid,
             target_cell_length_m,
@@ -390,7 +392,7 @@ def ndr_plus_and_stitch(
             target_export_raster_path,
             target_modified_load_raster_path,
             workspace_dir)
-        watershed_id = _create_watershed_id(watershed_path, watershed_fid)
+        LOGGER.debug(f'{watershed_id} is done')
         _set_work_status(
             WORK_STATUS_DATABASE_PATH,
             [(watershed_id, COMPUTED_STATUS)])
