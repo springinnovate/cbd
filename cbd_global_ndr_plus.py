@@ -230,7 +230,7 @@ def _create_work_table_schema(database_path):
         CREATE TABLE work_status (
             watershed_id TEXT NOT NULL,
             status TEXT NOT NULL,
-            PRIMARY KEY (watershed_id, status)
+            PRIMARY KEY (watershed_id)
         );
         CREATE TABLE global_variables (
             watershed_basename TEXT NOT NULL,
