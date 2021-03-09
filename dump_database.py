@@ -10,3 +10,4 @@ if __name__ == '__main__':
     connection = sqlite3.connect(ro_uri, uri=True)
     cursor = connection.execute('SELECT * FROM work_status;')
     payload = (cursor.fetchall())
+    print(payload)
