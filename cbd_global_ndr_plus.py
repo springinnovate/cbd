@@ -202,7 +202,7 @@ def _execute_sqlite(
         connection = None
         return result
     except sqlite3.OperationalError:
-        LOGGER.warning(
+        LOGGER.exception(
             f'{database_path} database is locked because another process is '
             'using it, waiting for a bit of time to try again')
         raise
