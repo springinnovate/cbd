@@ -176,7 +176,7 @@ def _execute_sqlite(
         elif execute == 'script':
             cursor = connection.executescript(sqlite_command)
         elif execute == 'executemany':
-            cursor = connection.executesmany(sqlite_command, argument_list)
+            cursor = connection.executemany(sqlite_command, argument_list)
         else:
             raise ValueError('Unknown execute mode: %s' % execute)
 
