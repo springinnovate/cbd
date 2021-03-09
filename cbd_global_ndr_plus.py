@@ -593,7 +593,6 @@ def main():
     stitch_worker_list = []
     stitch_queue_list = []
     target_raster_list = []
-    watersheds_processed = 0
     watersheds_scheduled = 0
     for scenario_id, scenario_vars in SCENARIOS.items():
         eff_n_lucode_map, load_n_lucode_map = load_biophysical_table(
