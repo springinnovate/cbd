@@ -462,7 +462,7 @@ def main():
     DEBUG_LOGGER.debug('starting script')
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     if not os.path.exists(WORK_STATUS_DATABASE_PATH):
-        _create_work_table_schema()
+        _create_work_table_schema(WORK_STATUS_DATABASE_PATH)
 
     task_graph = taskgraph.TaskGraph(
         WORKSPACE_DIR, multiprocessing.cpu_count())
