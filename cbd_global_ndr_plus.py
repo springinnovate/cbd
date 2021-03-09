@@ -374,6 +374,7 @@ def main():
 
     LOGGER.info(f'there are {total_watersheds} watersheds to process')
     DEBUG_LOGGER.debug(f'there are {total_watersheds} watersheds to process')
+    return
 
     manager = multiprocessing.Manager()
     stitch_worker_list = []
