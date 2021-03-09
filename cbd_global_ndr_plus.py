@@ -307,8 +307,7 @@ def stitch_worker(
                     args=(
                         raster_list,
                         ['near']*len(raster_list),
-                        (target_stitch_raster_path, 1),
-                        stitch_queue),
+                        (target_stitch_raster_path, 1)),
                     kwargs={
                         'overlap_algorithm': 'add',
                         'area_weight_m2_to_wgs84': True})
@@ -554,7 +553,8 @@ def main():
             target=stitch_worker,
             args=(
                 target_export_raster_path, target_modified_load_raster_path,
-                stitch_queue, watersheds_processed))
+                stitch_queue))
+
         stitch_worker_thread.start()
         stitch_worker_list.append(stitch_worker_thread)
 
