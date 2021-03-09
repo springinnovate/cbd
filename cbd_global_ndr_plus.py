@@ -573,7 +573,8 @@ def main():
                 continue
             watersheds_to_process += 1
         sql_statement = '''
-            INSERT OR REPLACE INTO global_variables(watershed_basename, count)
+            INSERT OR REPLACE INTO
+                global_variables(watershed_basename, watershed_count)
             VALUES(?, ?);
         '''
         _execute_sqlite(
