@@ -298,6 +298,10 @@ def stitch_worker(
                 modified_load_raster_list.append((modified_load_raster_path, 1))
                 workspace_list.append(workspace_dir)
 
+                for path in (export_raster_path, modified_load_raster_path):
+                    if not os.path.exists(path):
+                        print(f'this path was to stich but does not exist: {path}')
+
             if len(workspace_list) < 100 and payload is not None:
                 continue
 
