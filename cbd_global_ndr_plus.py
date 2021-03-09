@@ -123,7 +123,7 @@ def _setup_logger(name, log_file, level):
 
 
 LOGGER = _setup_logger(__name__, 'log.out', level=logging.INFO)
-DEBUG_LOGGER = _setup_logger(__name__, 'debug_log.out', level=logging.DEBUG)
+DEBUG_LOGGER = _setup_logger('debugger', 'debug_log.out', level=logging.DEBUG)
 
 
 def create_empty_wgs84_raster(cell_size, nodata, target_path):
@@ -374,13 +374,13 @@ def main():
 
     LOGGER.info(f'there are {total_watersheds} watersheds to process')
     DEBUG_LOGGER.debug(f'there are {total_watersheds} watersheds to process')
-    return
 
     manager = multiprocessing.Manager()
     stitch_worker_list = []
     stitch_queue_list = []
     target_raster_list = []
     watersheds_processed = 0
+    watersheds_scheduled = 0
     for scenario_id, scenario_vars in SCENARIOS.items():
         eff_n_lucode_map, load_n_lucode_map = load_biophysical_table(
             ecoshard_path_map[scenario_vars['biophysical_table_id']],
@@ -446,7 +446,9 @@ def main():
                         local_workspace_dir,
                         stitch_queue),
                     task_name=f'{watershed_basename}_{watershed_fid}')
+                watersheds_scheduled += 1
 
+    DEBUG_LOGGER.debug(f'there are {watersheds_scheduled} scheduled of {total_watersheds} which is {100*watersheds_scheduled/total_watersheds:.2}% done')
     task_graph.join()
     task_graph.close()
     for stitch_queue in stitch_queue_list:
