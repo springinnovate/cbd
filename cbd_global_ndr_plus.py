@@ -722,9 +722,13 @@ def main():
     LOGGER.debug('wait for scrubbing to end')
     task_graph.join()
     LOGGER.debug('done with downloads, check for invalid rasters')
+    checked_path_set = {}  # could have different id but same raster
     for ecoshard_id, ecoshard_path in ecoshard_path_map.items():
+        if ecoshard_path in checked_path_set:
+            continue
         if (pygeoprocessing.get_gis_type(ecoshard_path) ==
                 pygeoprocessing.RASTER_TYPE):
+            LOGGER.debug(f'checking {ecoshard_id} {ecoshard_path}')
             invalid_value_task = task_graph.add_task(
                 func=detect_invalid_values,
                 args=(ecoshard_path,),
@@ -732,6 +736,7 @@ def main():
                 task_name=f'detect invalid values in {ecoshard_path}')
             invalid_value_task_list.append(
                 (ecoshard_id, invalid_value_task))
+            checked_path_set.add(ecoshard_path)
     invalid_raster_list = []
     for invalid_value_task in invalid_value_task_list:
         invalid_value_result = invalid_value_task.get()
