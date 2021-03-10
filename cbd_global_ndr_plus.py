@@ -789,7 +789,6 @@ def main():
     stitch_worker_list = []
     stitch_queue_list = []
     target_raster_list = []
-    watersheds_scheduled = 0
     for scenario_id, scenario_vars in SCENARIOS.items():
         eff_n_lucode_map, load_n_lucode_map = load_biophysical_table(
             ecoshard_path_map[scenario_vars['biophysical_table_id']],
@@ -861,15 +860,17 @@ def main():
                     task_name=f'{watershed_basename}_{watershed_fid}')
                 watersheds_scheduled += 1
 
-    LOGGER.debug(f'there are {watersheds_scheduled} scheduled of {total_watersheds} which is {100*watersheds_scheduled/total_watersheds:.2}% done')
+    LOGGER.debug(f'there are {watersheds_scheduled} scheduled of {total_watersheds} which is {100*watersheds_scheduled/total_watersheds:.2}% done, joining taskgraph')
     task_graph.join()
     task_graph.close()
+    LOGGER.debug('ready to dump None to stitch queues')
     for stitch_queue in stitch_queue_list:
         stitch_queue.put(None)
+    LOGGER.debug('joining stitch worker threads')
     for stitch_worker_thread in stitch_worker_list:
         stitch_worker_thread.join()
 
-    # TODO: build overviews and compress
+    LOGGER.debug('building overviews and compressing results')
     build_overview_list = []
     for target_raster in target_raster_list:
         compress_raster_path = os.path.join(
@@ -880,8 +881,10 @@ def main():
             args=(target_raster, compress_raster_path))
         build_overview_process.start()
         build_overview_list.append(build_overview_process)
+    LOGGER.debug('joining the build overview processes')
     for process in build_overview_list:
         process.join()
+    LOGGER.debug('ALL DONE!')
 
 
 def compress_and_overview(base_raster_path, target_raster_path):
