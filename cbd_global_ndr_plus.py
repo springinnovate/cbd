@@ -519,9 +519,9 @@ def _report_watershed_count(base_total):
                 seconds_left = watersheds_left / n_processed_per_sec
             else:
                 seconds_left = 99999999999
-            hours_left = seconds_left // 3600
+            hours_left = int(seconds_left // 3600)
             seconds_left -= hours_left * 3600
-            minutes_left = seconds_left // 60
+            minutes_left = int(seconds_left // 60)
             seconds_left -= minutes_left*60
             REPORT_WATERSHED_LOGGER.info(
                 'watershed status:\n'+'\n'.join([
