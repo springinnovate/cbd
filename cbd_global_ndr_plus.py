@@ -715,7 +715,7 @@ def main():
             args=(ecoshard_path, scrub_path),
             target_path_list=[scrub_path],
             task_name=f'scrub {ecoshard_path}')
-        ecoshard_path_map[ecoshard_id] = scrub_path
+        ecoshard_path_map[ecoshard_id_to_scrub] = scrub_path
     LOGGER.debug('wait for scrubbing to end')
     task_graph.join()
     LOGGER.debug('done with downloads, check for invalid rasters')
