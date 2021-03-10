@@ -158,7 +158,6 @@ def _execute_sqlite(
         result of fetch if ``fetch`` is not None.
 
     """
-    LOGGER.debug(f'executing {sqlite_command}')
     cursor = None
     connection = None
     try:
@@ -205,7 +204,8 @@ def _execute_sqlite(
     except sqlite3.OperationalError:
         LOGGER.exception(
             f'{database_path} database is locked because another process is '
-            'using it, waiting for a bit of time to try again')
+            'using it, waiting for a bit of time to try again\n'
+            f'{sqlite_command}')
         raise
     except Exception:
         LOGGER.exception('Exception on _execute_sqlite: %s', sqlite_command)
@@ -582,16 +582,17 @@ def main():
     task_graph.join()
     DEBUG_LOGGER.debug('done with downloads')
 
+    total_watersheds = 0
     for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
         watershed_basename = os.path.basename(
             os.path.splitext(watershed_path)[0])
-        watersheds_to_process = 0
+        watersheds_to_process_count = 0
         watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
         watershed_layer = watershed_vector.GetLayer()
         for watershed_feature in watershed_layer:
             if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
                 continue
-            watersheds_to_process += 1
+            watersheds_to_process_count += 1
         sql_statement = '''
             INSERT OR REPLACE INTO
                 global_variables(watershed_basename, watershed_count)
@@ -599,15 +600,17 @@ def main():
         '''
         _execute_sqlite(
             sql_statement, WORK_STATUS_DATABASE_PATH,
-            argument_list=[watershed_basename, watersheds_to_process],
+            argument_list=[watershed_basename, watersheds_to_process_count],
             mode='modify', execute='execute')
+        total_watersheds += watersheds_to_process_count
         watershed_feature = None
         watershed_layer = None
         watershed_vector = None
 
     LOGGER.info(f'starting watershed status logger')
     report_watershed_thread = threading.Thread(
-        target=_report_watershed_count)
+        target=_report_watershed_count,
+        args=(total_watersheds,))
     report_watershed_thread.daemon = True
     report_watershed_thread.start()
 
