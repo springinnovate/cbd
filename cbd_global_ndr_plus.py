@@ -378,7 +378,7 @@ def scrub_raster(
         base_raster_info['datatype'], scrub_nodata)
 
     if any([non_finite_count, large_value_count, close_to_nodata]):
-        LOGGER.warn(
+        LOGGER.warning(
             f'{base_raster_path} scrubbed these values:\n'
             f'\n\tnon_finite_count: {non_finite_count}'
             f'\n\tlarge_value_count: {large_value_count}'
