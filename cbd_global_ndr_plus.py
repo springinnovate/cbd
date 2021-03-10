@@ -744,7 +744,7 @@ def main():
                 (ecoshard_id, invalid_value_task))
             checked_path_set.add(ecoshard_path)
     invalid_raster_list = []
-    for invalid_value_task in invalid_value_task_list:
+    for ecoshard_id, invalid_value_task in invalid_value_task_list:
         invalid_value_result = invalid_value_task.get()
         if invalid_value_result is not True:
             invalid_raster_list.append(
