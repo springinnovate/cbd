@@ -87,6 +87,10 @@ ECOSHARDS = {
     'extensificationnapp_allcrops_rainfedfootprint_gapfilled_observednapprevb': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/ExtensificationNapp_allcrops_rainfedfootprint_gapfilled_observedNappRevB_md5_1185e457751b672c67cc8c6bf7016d03.tif',
     'intensificationnapp_allcrops_irrigated_max_model_and_observednapprevb': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/IntensificationNapp_allcrops_irrigated_max_Model_and_observedNappRevB_md5_9331ed220772b21f4a2c81dd7a2d7e10.tif',
     'intensificationnapp_allcrops_rainfed_max_model_and_observednapprevb': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/IntensificationNapp_allcrops_rainfed_max_Model_and_observedNappRevB_md5_1df3d8463641ffc6b9321e73973f3444.tif',
+}
+
+# put IDs
+SCRUB_IDS = {
 
 }
 
@@ -128,12 +132,11 @@ def _setup_logger(name, log_file, level):
     return logger
 
 
-LOGGER = _setup_logger(__name__, 'log.out', level=logging.DEBUG)
-DEBUG_LOGGER = _setup_logger('debugger', 'debug_log.out', level=logging.DEBUG)
+LOGGER = _setup_logger('cbd_global_ndr_plus', 'log.out', level=logging.DEBUG)
 PYGEOPROCESSING_LOGGER = _setup_logger('pygeoprocessing', 'pygeoprocessinglog.out', level=logging.INFO)
 INSPRING_LOGGER = _setup_logger('inspring', 'inspringlog.out', level=logging.DEBUG)
 REPORT_WATERSHED_LOGGER = _setup_logger('report_watershed', 'report_watershed.out', level=logging.DEBUG)
-
+_ = _setup_logger(__name__, 'everythinglog.out', level=logging.DEBUG)
 
 @retrying.retry(
     wait_exponential_multiplier=500, wait_exponential_max=3200,
@@ -261,6 +264,41 @@ def _set_work_status(database_path, watershed_id_status_list):
     except Exception as e:
         print(f'{e} happened on work status')
         raise
+
+
+def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
+    """Raise an exception if an invalid value is found in the raster.
+
+    A ValueError is raised if there are any non-finite values, any values
+    that are close to nodata but not equal to nodata, or any values that
+    are just really big. If none of these are true then the function returns
+    ``True``.
+    """
+    base_nodata = pygeoprocessing.get_raster_info(
+        base_raster_path)['nodata'][0]
+    for _, block_array in pygeoprocessing.iterblocks((base_raster_path, 1)):
+        non_finite_mask = ~numpy.isfinite(block_array)
+        if non_finite_mask.any():
+            raise ValueError(
+                f'found some non-finite values in {base_raster_path}: '
+                f'{block_array[non_finite_mask]}')
+
+        large_value_mask = numpy.abs(block_array) >= max_abs
+        if large_value_mask.any():
+            raise ValueError(
+                f'found some very large values in {base_raster_path}: '
+                f'{block_array[large_value_mask]}')
+
+        close_to_nodata_mask = numpy.isclose(
+            block_array, base_nodata, rtol=rtol) & (
+            block_array != base_nodata)
+        if close_to_nodata_mask.any():
+            raise ValueError(
+                f'found some values that are close to nodata {base_nodata} '
+                f'but not equal to '
+                f'nodata in {base_raster_path}: '
+                f'{block_array[close_to_nodata_mask]}')
+    return True
 
 
 def scrub_raster(
@@ -616,7 +654,7 @@ def _report_watershed_count(base_total):
 
 def main():
     """Entry point."""
-    DEBUG_LOGGER.debug('starting script')
+    LOGGER.debug('starting script')
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     if not os.path.exists(WORK_STATUS_DATABASE_PATH):
         _create_work_table_schema(WORK_STATUS_DATABASE_PATH)
@@ -626,7 +664,7 @@ def main():
     os.makedirs(ECOSHARD_DIR, exist_ok=True)
     ecoshard_path_map = {}
     LOGGER.info('scheduling downloads')
-    DEBUG_LOGGER.debug('starting downloads')
+    LOGGER.debug('starting downloads')
     for ecoshard_id, ecoshard_url in ECOSHARDS.items():
         ecoshard_path = os.path.join(
             ECOSHARD_DIR, os.path.basename(ecoshard_url))
@@ -659,9 +697,21 @@ def main():
         args=(ecoshard_path_map[WATERSHED_ID], ECOSHARD_DIR),
         target_path_list=[expected_watershed_path],
         task_name='unzip watersheds')
-    DEBUG_LOGGER.debug('waiting for downloads and data to construct')
+    LOGGER.debug('waiting for downloads and data to construct')
     task_graph.join()
-    DEBUG_LOGGER.debug('done with downloads')
+    LOGGER.debug('done with downloads, check for invalid rasters')
+    invalid_value_task_list = []
+    for ecoshard_id, ecoshard_path in ecoshard_path_map.items():
+        if (pygeoprocessing.get_gis_type(ecoshard_path) ==
+                pygeoprocessing.RASTER_TYPE):
+            invalid_value_task = task_graph.add_task(
+                func=detect_invalid_values,
+                args=(ecoshard_path,),
+                store_result=True)
+            invalid_value_task_list.append(invalid_value_task)
+    for invalid_value_task in invalid_value_task_list:
+        if invalid_value_task.get() is not True:
+            raise ValueError(f'invalid raster at {invalid_value_task}')
 
     total_watersheds = 0
     for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
@@ -773,7 +823,7 @@ def main():
                     task_name=f'{watershed_basename}_{watershed_fid}')
                 watersheds_scheduled += 1
 
-    DEBUG_LOGGER.debug(f'there are {watersheds_scheduled} scheduled of {total_watersheds} which is {100*watersheds_scheduled/total_watersheds:.2}% done')
+    LOGGER.debug(f'there are {watersheds_scheduled} scheduled of {total_watersheds} which is {100*watersheds_scheduled/total_watersheds:.2}% done')
     task_graph.join()
     task_graph.close()
     for stitch_queue in stitch_queue_list:
