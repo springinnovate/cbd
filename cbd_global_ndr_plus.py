@@ -668,7 +668,7 @@ def main():
     parser.add_argument(
         '--n_workers', type=int, default=multiprocessing.cpu_count(),
         help='number of workers for Taskgraph.')
-    args = parser.parseArgs()
+    args = parser.parse_args()
     LOGGER.debug('starting script')
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     if not os.path.exists(WORK_STATUS_DATABASE_PATH):
