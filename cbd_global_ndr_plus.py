@@ -263,6 +263,87 @@ def _set_work_status(database_path, watershed_id_status_list):
         raise
 
 
+def scrub_raster(
+        base_raster_path, target_raster_path, target_nodata=None,
+        rtol=0.001, max_abs=1e30):
+    """Scrub invalid values from base.
+
+    Will search base raster for difficult values like NaN, +-inf, Very Large
+    values that may indicate a roundoff error when being compared to nodata.
+
+    Args:
+        base_raster_path (str): path to base raster
+        target_raster_path (str): path to raster created by this call with
+            invalid values 'scrubbed'.
+        target_nodata (numeric): if `None` then the nodata value is copied
+            from base, otherwise it is set to this value.
+        rtol (float): relative tolerance to use when comparing values with
+            nodata. Default is set to 1-3.4e38/float32.min.
+        max_abs (float): the maximum absolute value to expect in the raster
+            anything larger than this will be set to nodata. Defaults to
+            1e30.
+
+    Return:
+        None
+    """
+    if os.path.samefile(base_raster_path, target_raster_path):
+        raise ValueError(
+            f'{base_raster_path} and {target_raster_path} are the same file')
+    base_raster_info = pygeoprocessing.get_raster_info(base_raster_path)
+    base_nodata = base_raster_info['nodata'][0]
+    if base_nodata is None and target_nodata is None:
+        raise ValueError('value base and target nodata are both None')
+    if (base_nodata is not None and
+            target_nodata is not None and
+            base_nodata != target_nodata):
+        raise ValueError(
+            f'base raster at {base_raster_path} has a defined nodata '
+            f'value of {base_nodata} and also a requested '
+            f'target {target_nodata} value')
+    if target_nodata is None:
+        scrub_nodata = base_nodata
+    else:
+        scrub_nodata = target_nodata
+
+    non_finite_count = 0
+    large_value_count = 0
+    close_to_nodata = 0
+
+    def _scrub_op(base_array):
+        nonlocal non_finite_count
+        nonlocal large_value_count
+        nonlocal close_to_nodata
+        result = numpy.copy(base_array)
+        non_finite_mask = ~numpy.isfinite(base_array)
+        non_finite_count += numpy.count_nonzero(non_finite_mask)
+        result[non_finite_mask] = scrub_nodata
+
+        large_value_mask = numpy.abs(base_array) >= max_abs
+        large_value_count += numpy.count_nonzero(large_value_mask)
+        result[large_value_mask] = scrub_nodata
+
+        close_to_nodata_mask = numpy.isclose(
+            base_array, scrub_nodata, rtol=rtol) & (
+            base_array != scrub_nodata)
+        close_to_nodata += numpy.count_nonzero(close_to_nodata_mask)
+        result[close_to_nodata_mask] = scrub_nodata
+
+        return result
+
+    pygeoprocessing.raster_calculator(
+        [(base_raster_path, 1)], _scrub_op, target_raster_path,
+        base_raster_info['datatype'], scrub_nodata)
+
+    if any([non_finite_count, large_value_count, close_to_nodata]):
+        LOGGER.warn(
+            f'{base_raster_path} scrubbed these values:\n'
+            f'\n\tnon_finite_count: {non_finite_count}'
+            f'\n\tlarge_value_count: {large_value_count}'
+            f'\n\tclose_to_nodata: {close_to_nodata}')
+    else:
+        LOGGER.info(f'{base_raster_path} is CLEAN')
+
+
 def create_empty_wgs84_raster(cell_size, nodata, target_path):
     """Create an empty wgs84 raster to cover all the world."""
     n_cols = int(360 // cell_size)
@@ -310,7 +391,7 @@ def stitch_worker(
                     if not os.path.exists(path):
                         print(f'this path was to stich but does not exist: {path}')
 
-            if len(workspace_list) < 100 and payload is not None:
+            if len(workspace_list) < 1 and payload is not None:
                 continue
 
             worker_list = []
@@ -527,7 +608,7 @@ def _report_watershed_count(base_total):
                 f'\n******\ntotal left: {watersheds_left}'+
                 '\nwatershed status:\n'+'\n'.join([
                     str(v) for v in watershed_basename_count_list]) +
-                f'\n\t\ttime left: {hours_left}:{minutes_left:02d}:{seconds_left:04.1f}')
+                f'\ntime left: {hours_left}:{minutes_left:02d}:{seconds_left:04.1f}')
 
     except Exception:
         REPORT_WATERSHED_LOGGER.exception('something bad happened')
@@ -649,10 +730,16 @@ def main():
         stitch_worker_list.append(stitch_worker_thread)
 
         for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
+            # TODO: this is for debugging
+            if watersheds_scheduled >= 100:
+                break
             watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
             watershed_layer = watershed_vector.GetLayer()
             watershed_basename = os.path.splitext(os.path.basename(watershed_path))[0]
             for watershed_feature in watershed_layer:
+                # TODO: this is for debugging
+                if watersheds_scheduled >= 100:
+                    break
                 if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
                     continue
 
