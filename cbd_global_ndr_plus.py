@@ -27,6 +27,7 @@ logging.getLogger('taskgraph').setLevel(logging.INFO)
 
 WORKSPACE_DIR = 'cbd_workspace'
 ECOSHARD_DIR = os.path.join(WORKSPACE_DIR, 'ecoshards')
+SCRUB_DIR = os.path.join(ECOSHARD_DIR, 'scrubbed_ecoshards')
 WORK_STATUS_DATABASE_PATH = os.path.join(WORKSPACE_DIR, 'work_status.db')
 COMPUTED_STATUS = 'computed'  # use when computed but not stitched
 COMPLETE_STATUS = 'complete'  # use when stitched and deleted
@@ -89,9 +90,10 @@ ECOSHARDS = {
     'intensificationnapp_allcrops_rainfed_max_model_and_observednapprevb': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/IntensificationNapp_allcrops_rainfed_max_Model_and_observedNappRevB_md5_1df3d8463641ffc6b9321e73973f3444.tif',
 }
 
-# put IDs
+# put IDs here that need to be scrubbed, you may know these a priori or you
+# may run the pipeline and see an error and realize you need to add them
 SCRUB_IDS = {
-
+    'worldclim_ssp3',
 }
 
 # DEFINE SCENARIOS HERE SPECIFYING 'lulc_id', 'precip_id', 'fertilizer_id', and 'biophysical_table_id'
@@ -699,8 +701,16 @@ def main():
         task_name='unzip watersheds')
     LOGGER.debug('waiting for downloads and data to construct')
     task_graph.join()
-    LOGGER.debug('done with downloads, check for invalid rasters')
     invalid_value_task_list = []
+    os.makedirs(SCRUB_DIR, exist_ok=True)
+    for ecoshard_id_to_scrub in SCRUB_IDS:
+        ecoshard_path = ecoshard_path_map[ecoshard_id_to_scrub]
+        scrub_path = os.path.join(SCRUB_DIR, os.path.basename(ecoshard_path))
+        task_graph.add_task(
+            func=scrub_raster,
+            args=(ecoshard_path, scrub_path),
+            target_path_list=[scrub_path])
+    LOGGER.debug('done with downloads, check for invalid rasters')
     for ecoshard_id, ecoshard_path in ecoshard_path_map.items():
         if (pygeoprocessing.get_gis_type(ecoshard_path) ==
                 pygeoprocessing.RASTER_TYPE):
