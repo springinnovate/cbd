@@ -342,7 +342,7 @@ def stitch_worker(
                     WHERE watershed_basename=?''',
                     WORK_STATUS_DATABASE_PATH, mode='read_only',
                     execute='execute', fetch='one',
-                    argument_list=[watershed_basename])
+                    argument_list=[watershed_basename])[0]
                 _execute_sqlite(
                     '''UPDATE global_variables
                     SET watershed_count=?
