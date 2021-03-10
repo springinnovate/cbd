@@ -18,6 +18,7 @@ from osgeo import osr
 import ecoshard
 import pandas
 import pygeoprocessing
+import numpy
 import retrying
 import taskgraph
 
@@ -514,7 +515,10 @@ def _report_watershed_count(base_total):
             if len(last_n_processed) > n:
                 last_n_processed.pop(0)
             n_processed_per_sec = numpy.mean(last_n_processed) / sleep_time
-            seconds_left = watersheds_left / n_processed_per_sec
+            if n_processed_per_sec > 0:
+                seconds_left = watersheds_left / n_processed_per_sec
+            else:
+                seconds_left = 99999999999
             hours_left = seconds_left // 3600
             seconds_left -= hours_left * 3600
             minutes_left = seconds_left // 60
@@ -522,11 +526,9 @@ def _report_watershed_count(base_total):
             REPORT_WATERSHED_LOGGER.info(
                 'watershed status:\n'+'\n'.join([
                     str(v) for v in watershed_basename_count_list]) +
-                f'{hours_left}:{minutes_left:02d}:{seconds_left:02d}')
+                f'\ntime left: {hours_left}:{minutes_left:02d}:{seconds_left:02d}'
+                f'\ntotal left: {watersheds_left}')
 
-            watershed_feature = None
-            watershed_layer = None
-            watershed_vector = None
     except Exception:
         REPORT_WATERSHED_LOGGER.exception('something bad happened')
 
