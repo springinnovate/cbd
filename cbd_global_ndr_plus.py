@@ -276,6 +276,7 @@ def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
     are just really big. If none of these are true then the function returns
     ``True``.
     """
+    numpy.set_printoptions(precision=15)
     base_nodata = pygeoprocessing.get_raster_info(
         base_raster_path)['nodata'][0]
     for _, block_array in pygeoprocessing.iterblocks((base_raster_path, 1)):
@@ -296,11 +297,12 @@ def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
                 f'{block_array[close_to_nodata_mask]}')
 
         large_value_mask = (
-            (numpy.abs(block_array) >= max_abs) & ~close_to_nodata_mask)
+            (numpy.abs(block_array) >= max_abs) & ~numpy.isclose(
+                block_array, base_nodata))
         if large_value_mask.any():
             raise ValueError(
-                f'found some very large values in {base_raster_path}: '
-                f'{block_array[large_value_mask]}')
+                f'found some very large values not close to {base_nodata} in '
+                f'{base_raster_path}: {block_array[large_value_mask]}')
 
     return True
 
