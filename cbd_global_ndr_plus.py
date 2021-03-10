@@ -286,20 +286,20 @@ def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
             return (
                 f'found some non-finite values in {base_raster_path}: '
                 f'{block_array[non_finite_mask]}')
+        if base_nodata is not None:
+            close_to_nodata_mask = numpy.isclose(
+                block_array, base_nodata, rtol=rtol) & ~numpy.isclose(
+                block_array, base_nodata)
+            if close_to_nodata_mask.any():
+                return (
+                    f'found some values that are close to nodata {base_nodata} '
+                    f'but not equal to '
+                    f'nodata in {base_raster_path}: '
+                    f'{block_array[close_to_nodata_mask]}')
 
-        close_to_nodata_mask = numpy.isclose(
-            block_array, base_nodata, rtol=rtol) & ~numpy.isclose(
-            block_array, base_nodata)
-        if close_to_nodata_mask.any():
-            return (
-                f'found some values that are close to nodata {base_nodata} '
-                f'but not equal to '
-                f'nodata in {base_raster_path}: '
-                f'{block_array[close_to_nodata_mask]}')
-
-        large_value_mask = (
-            (numpy.abs(block_array) >= max_abs) & ~numpy.isclose(
-                block_array, base_nodata))
+        large_value_mask = (numpy.abs(block_array) >= max_abs)
+        if base_nodata is not None:
+            large_value_mask &= ~numpy.isclose(block_array, base_nodata)
         if large_value_mask.any():
             return (
                 f'found some very large values not close to {base_nodata} in '
