@@ -728,7 +728,7 @@ def main():
     LOGGER.debug('wait for scrubbing to end')
     task_graph.join()
     LOGGER.debug('done with downloads, check for invalid rasters')
-    checked_path_set = {}  # could have different id but same raster
+    checked_path_set = set()  # could have different id but same raster
     for ecoshard_id, ecoshard_path in ecoshard_path_map.items():
         if ecoshard_path in checked_path_set:
             continue
