@@ -286,8 +286,8 @@ def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
                 f'{block_array[non_finite_mask]}')
 
         close_to_nodata_mask = numpy.isclose(
-            block_array, base_nodata, rtol=rtol) & (
-            block_array != base_nodata)
+            block_array, base_nodata, rtol=rtol) & ~numpy.isclose(
+            block_array, base_nodata)
         if close_to_nodata_mask.any():
             raise ValueError(
                 f'found some values that are close to nodata {base_nodata} '
