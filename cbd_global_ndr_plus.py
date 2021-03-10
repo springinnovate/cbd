@@ -401,7 +401,7 @@ def ndr_plus_and_stitch(
         ``None``
     """
     try:
-        watershed_basenane, watershed_id = _create_watershed_id(watershed_path, watershed_fid)
+        watershed_basename, watershed_id = _create_watershed_id(watershed_path, watershed_fid)
         LOGGER.debug(f'{watershed_id} about to be run')
         ndr_plus(
             watershed_path, watershed_fid,
