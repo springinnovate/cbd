@@ -728,8 +728,10 @@ def main():
             invalid_value_task = task_graph.add_task(
                 func=detect_invalid_values,
                 args=(ecoshard_path,),
-                store_result=True)
-            invalid_value_task_list.append(invalid_value_task)
+                store_result=True,
+                task_name=f'detect invalid values in {ecoshard_path}')
+            invalid_value_task_list.append(
+                (ecoshard_id, invalid_value_task))
     invalid_raster_list = []
     for invalid_value_task in invalid_value_task_list:
         invalid_value_result = invalid_value_task.get()
