@@ -526,7 +526,7 @@ def _report_watershed_count(base_total):
             REPORT_WATERSHED_LOGGER.info(
                 'watershed status:\n'+'\n'.join([
                     str(v) for v in watershed_basename_count_list]) +
-                f'\ntime left: {hours_left}:{minutes_left:02d}:{seconds_left:02d}'
+                f'\ntime left: {hours_left}:{minutes_left:02d}:{seconds_left:04.1f}'
                 f'\ntotal left: {watersheds_left}')
 
     except Exception:
