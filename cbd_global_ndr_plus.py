@@ -269,10 +269,10 @@ def _set_work_status(database_path, watershed_id_status_list):
 
 
 def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
-    """Raise an exception if an invalid value is found in the raster.
+    """Return error if an invalid value is found in the raster.
 
-    A ValueError is raised if there are any non-finite values, any values
-    that are close to nodata but not equal to nodata, or any values that
+    A return value of errors are raised if there are any non-finite values, any
+    values that are close to nodata but not equal to nodata, or any values that
     are just really big. If none of these are true then the function returns
     ``True``.
     """
@@ -282,7 +282,7 @@ def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
     for _, block_array in pygeoprocessing.iterblocks((base_raster_path, 1)):
         non_finite_mask = ~numpy.isfinite(block_array)
         if non_finite_mask.any():
-            raise ValueError(
+            return (
                 f'found some non-finite values in {base_raster_path}: '
                 f'{block_array[non_finite_mask]}')
 
@@ -290,7 +290,7 @@ def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
             block_array, base_nodata, rtol=rtol) & ~numpy.isclose(
             block_array, base_nodata)
         if close_to_nodata_mask.any():
-            raise ValueError(
+            return (
                 f'found some values that are close to nodata {base_nodata} '
                 f'but not equal to '
                 f'nodata in {base_raster_path}: '
@@ -300,7 +300,7 @@ def detect_invalid_values(base_raster_path, rtol=0.001, max_abs=1e30):
             (numpy.abs(block_array) >= max_abs) & ~numpy.isclose(
                 block_array, base_nodata))
         if large_value_mask.any():
-            raise ValueError(
+            return (
                 f'found some very large values not close to {base_nodata} in '
                 f'{base_raster_path}: {block_array[large_value_mask]}')
 
