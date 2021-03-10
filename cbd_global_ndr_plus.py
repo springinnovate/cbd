@@ -356,17 +356,17 @@ def scrub_raster(
         nonlocal large_value_count
         nonlocal close_to_nodata
         result = numpy.copy(base_array)
-        non_finite_mask = ~numpy.isfinite(base_array)
+        non_finite_mask = ~numpy.isfinite(result)
         non_finite_count += numpy.count_nonzero(non_finite_mask)
         result[non_finite_mask] = scrub_nodata
 
-        large_value_mask = numpy.abs(base_array) >= max_abs
+        large_value_mask = numpy.abs(result) >= max_abs
         large_value_count += numpy.count_nonzero(large_value_mask)
         result[large_value_mask] = scrub_nodata
 
         close_to_nodata_mask = numpy.isclose(
-            base_array, scrub_nodata, rtol=rtol) & (
-            base_array != scrub_nodata)
+            result, scrub_nodata, rtol=rtol) & (
+            result != scrub_nodata)
         close_to_nodata += numpy.count_nonzero(close_to_nodata_mask)
         result[close_to_nodata_mask] = scrub_nodata
 
@@ -382,7 +382,8 @@ def scrub_raster(
             f'{base_raster_path} scrubbed these values:\n'
             f'\n\tnon_finite_count: {non_finite_count}'
             f'\n\tlarge_value_count: {large_value_count}'
-            f'\n\tclose_to_nodata: {close_to_nodata}')
+            f'\n\tclose_to_nodata: {close_to_nodata} '
+            f'\n\tto the nodata value of: {scrub_nodata}')
     else:
         LOGGER.info(f'{base_raster_path} is CLEAN')
 
@@ -714,6 +715,9 @@ def main():
             args=(ecoshard_path, scrub_path),
             target_path_list=[scrub_path],
             task_name=f'scrub {ecoshard_path}')
+        ecoshard_path_map[ecoshard_id] = scrub_path
+    LOGGER.debug('wait for scrubbing to end')
+    scrub_path.join()
     LOGGER.debug('done with downloads, check for invalid rasters')
     for ecoshard_id, ecoshard_path in ecoshard_path_map.items():
         if (pygeoprocessing.get_gis_type(ecoshard_path) ==
