@@ -367,12 +367,11 @@ def scrub_raster(
         result[large_value_mask] = scrub_nodata
 
         close_to_nodata_mask = numpy.isclose(
-            result, scrub_nodata, rtol=rtol) & (
-            result != scrub_nodata)
+            result, scrub_nodata, rtol=rtol)
         close_to_nodata += numpy.count_nonzero(close_to_nodata_mask)
         result[close_to_nodata_mask] = scrub_nodata
-
         return result
+
     LOGGER.debug(
         f'starting raster_calculator op for scrubbing {base_raster_path}')
     pygeoprocessing.raster_calculator(
