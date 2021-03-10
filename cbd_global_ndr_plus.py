@@ -832,8 +832,11 @@ def main():
                     break
                 if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
                     continue
-
                 watershed_fid = watershed_feature.GetFID()
+                if f'{watershed_basename}_{watershed_fid}' != 'af_bas_15s_beta_841':
+                    watersheds_scheduled += 1
+                    continue
+
                 local_workspace_dir = os.path.join(
                     WORKSPACE_DIR, scenario_id,
                     f'{watershed_basename}_{watershed_fid}')
