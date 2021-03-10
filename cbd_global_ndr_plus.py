@@ -496,17 +496,34 @@ def unzip_and_build_dem_vrt(
     LOGGER.info(f'all done building {target_vrt_path}')
 
 
-def _report_watershed_count():
+def _report_watershed_count(base_total):
     try:
+        n = 20
+        sleep_time = 15.0
+        last_n_processed = []
+        watersheds_left = base_total
         while True:
-            time.sleep(15)
+            time.sleep(sleep_time)
             sql_statement = 'SELECT * FROM global_variables'
             watershed_basename_count_list = _execute_sqlite(
                 sql_statement, WORK_STATUS_DATABASE_PATH,
                 mode='read_only', execute='execute', fetch='all')
+            current_left = numpy.sum([x[1] for x in watershed_basename_count_list])
+            last_n_processed.append(watersheds_left-current_left)
+            watersheds_left = current_left
+            if len(last_n_processed) > n:
+                last_n_processed.pop(0)
+            n_processed_per_sec = numpy.mean(last_n_processed) / sleep_time
+            seconds_left = watersheds_left / n_processed_per_sec
+            hours_left = seconds_left // 3600
+            seconds_left -= hours_left * 3600
+            minutes_left = seconds_left // 60
+            seconds_left -= minutes_left*60
             REPORT_WATERSHED_LOGGER.info(
                 'watershed status:\n'+'\n'.join([
-                    str(v) for v in watershed_basename_count_list]))
+                    str(v) for v in watershed_basename_count_list]) +
+                f'{hours_left}:{minutes_left:02d}:{seconds_left:02d}')
+
             watershed_feature = None
             watershed_layer = None
             watershed_vector = None
