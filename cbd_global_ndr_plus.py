@@ -454,7 +454,7 @@ def stitch_worker(
                         ['near']*len(raster_list),
                         (target_stitch_raster_path, 1)),
                     kwargs={
-                        'overlap_algorithm': 'add',
+                        'overlap_algorithm': 'etch',
                         'area_weight_m2_to_wgs84': True})
                 stitch_worker.start()
                 worker_list.append(stitch_worker)
@@ -801,10 +801,12 @@ def main():
         target_modified_load_raster_path = os.path.join(
             WORKSPACE_DIR, f'{scenario_id}_{TARGET_CELL_LENGTH_M:.1f}_{ROUTING_ALGORITHM}_modified_load.tif')
 
-        create_empty_wgs84_raster(
-            TARGET_WGS84_LENGTH_DEG, -1, target_export_raster_path)
-        create_empty_wgs84_raster(
-            TARGET_WGS84_LENGTH_DEG, -1, target_modified_load_raster_path)
+        if not os.path.exists(target_export_raster_path):
+            create_empty_wgs84_raster(
+                TARGET_WGS84_LENGTH_DEG, -1, target_export_raster_path)
+        if not os.path.exists(target_modified_load_raster_path):
+            create_empty_wgs84_raster(
+                TARGET_WGS84_LENGTH_DEG, -1, target_modified_load_raster_path)
 
         target_raster_list.extend(
             [target_export_raster_path, target_modified_load_raster_path])
