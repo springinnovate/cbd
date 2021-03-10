@@ -310,7 +310,7 @@ def stitch_worker(
                     if not os.path.exists(path):
                         print(f'this path was to stich but does not exist: {path}')
 
-            if len(workspace_list) < 100 and payload is not None:
+            if len(workspace_list) < 1 and payload is not None:
                 continue
 
             worker_list = []
