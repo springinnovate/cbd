@@ -730,9 +730,16 @@ def main():
                 args=(ecoshard_path,),
                 store_result=True)
             invalid_value_task_list.append(invalid_value_task)
+    invalid_raster_list = []
     for invalid_value_task in invalid_value_task_list:
-        if invalid_value_task.get() is not True:
-            raise ValueError(f'invalid raster at {invalid_value_task}')
+        invalid_value_result = invalid_value_task.get()
+        if invalid_value_result is not True:
+            invalid_raster_list.append(
+                (ecoshard_id, invalid_value_result))
+    if invalid_raster_list:
+        raise ValueError(
+            f'invalid rasters at ' +
+            '\n'.join([str(x) for x in invalid_raster_list]))
 
     total_watersheds = 0
     for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
