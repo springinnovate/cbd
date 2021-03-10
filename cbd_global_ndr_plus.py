@@ -717,7 +717,7 @@ def main():
             task_name=f'scrub {ecoshard_path}')
         ecoshard_path_map[ecoshard_id] = scrub_path
     LOGGER.debug('wait for scrubbing to end')
-    scrub_path.join()
+    task_graph.join()
     LOGGER.debug('done with downloads, check for invalid rasters')
     for ecoshard_id, ecoshard_path in ecoshard_path_map.items():
         if (pygeoprocessing.get_gis_type(ecoshard_path) ==
