@@ -1,4 +1,5 @@
 """Tracer for NDR watershed processing."""
+import argparse
 import collections
 import glob
 import logging
@@ -663,13 +664,18 @@ def _report_watershed_count(base_total):
 
 def main():
     """Entry point."""
+    parser = argparse.ArgumentParser(description='Run CBD data pipeline')
+    parser.add_argument(
+        '--n_workers', type=int, default=multiprocessing.cpu_count(),
+        help='number of workers for Taskgraph.')
+
     LOGGER.debug('starting script')
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     if not os.path.exists(WORK_STATUS_DATABASE_PATH):
         _create_work_table_schema(WORK_STATUS_DATABASE_PATH)
 
     task_graph = taskgraph.TaskGraph(
-        WORKSPACE_DIR, -1)
+        WORKSPACE_DIR, parser.n_workers)
     os.makedirs(ECOSHARD_DIR, exist_ok=True)
     ecoshard_path_map = {}
     LOGGER.info('scheduling downloads')
