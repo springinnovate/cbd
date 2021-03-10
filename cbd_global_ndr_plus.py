@@ -369,7 +369,8 @@ def stitch_worker(
 
 def _create_watershed_id(watershed_path, watershed_fid):
     """Create unique ID from path and FID."""
-    return f'{os.path.basename(os.path.splitext(watershed_path)[0])}_{watershed_fid}'
+    watershed_basename = os.path.basename(os.path.splitext(watershed_path)[0])
+    return (watershed_basename, f'{watershed_basename}_{watershed_fid}')
 
 
 def ndr_plus_and_stitch(
@@ -400,7 +401,7 @@ def ndr_plus_and_stitch(
         ``None``
     """
     try:
-        watershed_id = _create_watershed_id(watershed_path, watershed_fid)
+        watershed_basenane, watershed_id = _create_watershed_id(watershed_path, watershed_fid)
         LOGGER.debug(f'{watershed_id} about to be run')
         ndr_plus(
             watershed_path, watershed_fid,
@@ -424,7 +425,7 @@ def ndr_plus_and_stitch(
             [(watershed_id, COMPUTED_STATUS)])
         stitch_queue.put(
             (target_export_raster_path, target_modified_load_raster_path,
-             workspace_dir, watershed_id))
+             workspace_dir, watershed_basename, watershed_id))
     except Exception:
         LOGGER.exception(
             f'this exception happened on {watershed_path} {watershed_fid} but skipping with no problem')
