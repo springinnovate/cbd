@@ -326,7 +326,9 @@ def scrub_raster(
     Return:
         None
     """
-    if os.path.samefile(base_raster_path, target_raster_path):
+    LOGGER.debug(f'scrubbing {base_raster_path}')
+    if (os.path.exists(target_raster_path) and
+            os.path.samefile(base_raster_path, target_raster_path)):
         raise ValueError(
             f'{base_raster_path} and {target_raster_path} are the same file')
     base_raster_info = pygeoprocessing.get_raster_info(base_raster_path)
@@ -369,7 +371,8 @@ def scrub_raster(
         result[close_to_nodata_mask] = scrub_nodata
 
         return result
-
+    LOGGER.debug(
+        f'starting raster_calculator op for scrubbing {base_raster_path}')
     pygeoprocessing.raster_calculator(
         [(base_raster_path, 1)], _scrub_op, target_raster_path,
         base_raster_info['datatype'], scrub_nodata)
@@ -709,7 +712,8 @@ def main():
         task_graph.add_task(
             func=scrub_raster,
             args=(ecoshard_path, scrub_path),
-            target_path_list=[scrub_path])
+            target_path_list=[scrub_path],
+            task_name=f'scrub {ecoshard_path}')
     LOGGER.debug('done with downloads, check for invalid rasters')
     for ecoshard_id, ecoshard_path in ecoshard_path_map.items():
         if (pygeoprocessing.get_gis_type(ecoshard_path) ==
