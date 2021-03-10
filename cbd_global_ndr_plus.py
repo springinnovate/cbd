@@ -668,14 +668,14 @@ def main():
     parser.add_argument(
         '--n_workers', type=int, default=multiprocessing.cpu_count(),
         help='number of workers for Taskgraph.')
-
+    args = parser.parseArgs()
     LOGGER.debug('starting script')
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
     if not os.path.exists(WORK_STATUS_DATABASE_PATH):
         _create_work_table_schema(WORK_STATUS_DATABASE_PATH)
 
     task_graph = taskgraph.TaskGraph(
-        WORKSPACE_DIR, parser.n_workers)
+        WORKSPACE_DIR, args.n_workers)
     os.makedirs(ECOSHARD_DIR, exist_ok=True)
     ecoshard_path_map = {}
     LOGGER.info('scheduling downloads')
