@@ -503,7 +503,7 @@ def _report_watershed_count():
             sql_statement = 'SELECT * FROM global_variables'
             watershed_basename_count_list = _execute_sqlite(
                 sql_statement, WORK_STATUS_DATABASE_PATH,
-                mode='read_only', execute='fetchall')
+                mode='read_only', execute='execute', fetch='all')
             REPORT_WATERSHED_LOGGER.info(
                 'watershed status:\n'+'\n'.join([
                     str(v) for v in watershed_basename_count_list]))
