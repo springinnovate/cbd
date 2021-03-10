@@ -310,7 +310,7 @@ def stitch_worker(
                     if not os.path.exists(path):
                         print(f'this path was to stich but does not exist: {path}')
 
-            if len(workspace_list) < 1 and payload is not None:
+            if len(workspace_list) < 100 and payload is not None:
                 continue
 
             worker_list = []
@@ -649,16 +649,10 @@ def main():
         stitch_worker_list.append(stitch_worker_thread)
 
         for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
-            # TODO: this is for debugging
-            if watersheds_scheduled >= 100:
-                break
             watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
             watershed_layer = watershed_vector.GetLayer()
             watershed_basename = os.path.splitext(os.path.basename(watershed_path))[0]
             for watershed_feature in watershed_layer:
-                # TODO: this is for debugging
-                if watersheds_scheduled >= 100:
-                    break
                 if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
                     continue
 
