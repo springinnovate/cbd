@@ -491,6 +491,7 @@ def stitch_worker(
             status_update_list = []
 
             if payload is None:
+                stitch_queue.put(None)
                 break
     except Exception:
         LOGGER.exception('something bad happened on ndr stitcher')
@@ -683,8 +684,6 @@ def main():
     for ecoshard_id, ecoshard_url in ECOSHARDS.items():
         ecoshard_path = os.path.join(
             ECOSHARD_DIR, os.path.basename(ecoshard_url))
-        LOGGER.debug(f'download {ecoshard_url}')
-        LOGGER.debug(f'dlcode: {urllib.request.urlopen(ecoshard_url).getcode()}')
         download_task = task_graph.add_task(
             func=ecoshard.download_url,
             args=(ecoshard_url, ecoshard_path),
