@@ -20,7 +20,9 @@ import pandas
 import pygeoprocessing
 import numpy
 import retrying
-import shapely
+import shapely.geometry
+import shapely.prepared
+import shapely.wkb
 import taskgraph
 
 gdal.SetCacheMax(2**27)
@@ -791,6 +793,7 @@ def main():
     target_raster_list = []
     dem_info = pygeoprocessing.get_raster_info(DEM_VRT_PATH)
     dem_bb_shapely = shapely.geometry.box(*dem_info['bounding_box'])
+    dem_bb_shapely_prep = shapely.prepared.prep(dem_bb_shapely)
     for scenario_id, scenario_vars in SCENARIOS.items():
         eff_n_lucode_map, load_n_lucode_map = load_biophysical_table(
             ecoshard_path_map[scenario_vars['biophysical_table_id']],
@@ -836,7 +839,7 @@ def main():
                 watershed_geom = shapely.wkb.loads(
                     watershed_feature.GetGeometryRef().ExportToWkb())
 
-                if not watershed_geom.intersects(dem_bb_shapely):
+                if not dem_bb_shapely_prep.intersects(watershed_geom):
                     # outside of the DEM definition
                     continue
 
