@@ -10,7 +10,6 @@ import subprocess
 import sqlite3
 import time
 import threading
-import urllib
 import zipfile
 
 from inspring.ndr_plus.ndr_plus import ndr_plus
@@ -21,6 +20,7 @@ import pandas
 import pygeoprocessing
 import numpy
 import retrying
+import shapely
 import taskgraph
 
 gdal.SetCacheMax(2**27)
@@ -82,8 +82,8 @@ ECOSHARDS = {
     'fixedarea_intensified_rainfed': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/fixedarea_intensified_rainfed_md5_98ac886076a35507c962263ee6733581.tif',
     'global_potential_vegetation': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/global_potential_vegetation_md5_61ee1f0ffe1b6eb6f2505845f333cf30.tif',
     # Fertilizer
-    'ag_load_2015':f'{ECOSHARD_PREFIX}ipbes-ndr-ecoshard-data/ag_load_scenarios/2015_ag_load_md5_4d8ea3cba0f1720afd4a1f2377fb974e.tif',
-    'ag_load_ssp3':f'{ECOSHARD_PREFIX}ipbes-ndr-ecoshard-data/ag_load_scenarios/ssp3_2050_ag_load_md5_9fab631dfdae22d12cd92bb1983f9ef1.tif',
+    'ag_load_2015': f'{ECOSHARD_PREFIX}ipbes-ndr-ecoshard-data/ag_load_scenarios/2015_ag_load_md5_4d8ea3cba0f1720afd4a1f2377fb974e.tif',
+    'ag_load_ssp3': f'{ECOSHARD_PREFIX}ipbes-ndr-ecoshard-data/ag_load_scenarios/ssp3_2050_ag_load_md5_9fab631dfdae22d12cd92bb1983f9ef1.tif',
     'intensificationnapp_allcrops_irrigated_max_model_and_observednapprevb_bmps': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/IntensificationNapp_allcrops_irrigated_max_Model_and_observedNappRevB_BMPs_md5_ddc000f7ce7c0773039977319bcfcf5d.tif',
     'intensificationnapp_allcrops_rainfed_max_model_and_observednapprevb_bmps': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/IntensificationNapp_allcrops_rainfed_max_Model_and_observedNappRevB_BMPs_md5_fa2684c632ec2d0e0afb455b41b5d2a6.tif',
     'extensificationnapp_allcrops_rainfedfootprint_gapfilled_observednapprevb': f'{ECOSHARD_PREFIX}nci-ecoshards/scenarios050420/ExtensificationNapp_allcrops_rainfedfootprint_gapfilled_observedNappRevB_md5_1185e457751b672c67cc8c6bf7016d03.tif',
@@ -789,6 +789,8 @@ def main():
     stitch_worker_list = []
     stitch_queue_list = []
     target_raster_list = []
+    dem_info = pygeoprocessing.get_raster_info(DEM_VRT_PATH)
+    dem_bb_shapely = shapely.geometry.box(*dem_info['bounding_box'])
     for scenario_id, scenario_vars in SCENARIOS.items():
         eff_n_lucode_map, load_n_lucode_map = load_biophysical_table(
             ecoshard_path_map[scenario_vars['biophysical_table_id']],
@@ -831,6 +833,13 @@ def main():
                     break
                 if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
                     continue
+                watershed_geom = shapely.wkb.loads(
+                    watershed_feature.GetGeometryRef().ExportToWkb())
+
+                if not watershed_geom.intersects(dem_bb_shapely):
+                    # outside of the DEM definition
+                    continue
+
                 watershed_fid = watershed_feature.GetFID()
 
                 local_workspace_dir = os.path.join(
