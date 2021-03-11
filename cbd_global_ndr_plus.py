@@ -770,6 +770,7 @@ def main():
         sql_statement = '''
             INSERT OR REPLACE INTO
                 global_variables(watershed_basename, watershed_count)
+                watershed_basename, watershed_count
             VALUES(?, ?);
         '''
         _execute_sqlite(
@@ -780,6 +781,17 @@ def main():
         watershed_feature = None
         watershed_layer = None
         watershed_vector = None
+
+    sql_statement = f'''
+        SELECT watershed_id
+        FROM work_status
+        WHERE status != "{COMPLETE_STATUS}"'''
+
+    completed_watershed_ids = _execute_sqlite(
+        sql_statement, WORK_STATUS_DATABASE_PATH,
+        mode='read_only', execute='execute', fetch='all')
+    completed_watershed_id_set = {
+        x[0] for x in completed_watershed_ids}
 
     LOGGER.info(f'starting watershed status logger')
     report_watershed_thread = threading.Thread(
@@ -845,14 +857,17 @@ def main():
                     continue
 
                 watershed_fid = watershed_feature.GetFID()
-
+                watershed_id = f'{watershed_basename}_{watershed_fid}'
+                if watershed_id in completed_watershed_id_set:
+                    continue
                 local_workspace_dir = os.path.join(
-                    WORKSPACE_DIR, scenario_id,
-                    f'{watershed_basename}_{watershed_fid}')
+                    WORKSPACE_DIR, scenario_id, watershed_id)
                 local_export_raster_path = os.path.join(
-                    local_workspace_dir, os.path.basename(target_export_raster_path))
+                    local_workspace_dir, os.path.basename(
+                        target_export_raster_path))
                 local_modified_load_raster_path = os.path.join(
-                    local_workspace_dir, os.path.basename(target_modified_load_raster_path))
+                    local_workspace_dir, os.path.basename(
+                        target_modified_load_raster_path))
                 task_graph.add_task(
                     func=ndr_plus_and_stitch,
                     args=(
