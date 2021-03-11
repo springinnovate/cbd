@@ -810,7 +810,7 @@ def main():
             _execute_sqlite(
                 sql_statement, WORK_STATUS_DATABASE_PATH,
                 argument_list=[
-                    (scenario_id, watershed_id, watershed_area,
+                    (scenario_id, int(watershed_id), watershed_area,
                      SCHEDULED_STATUS) for (watershed_id, watershed_area)
                     in local_watershed_process_list],
                 mode='modify', execute='executemany')
