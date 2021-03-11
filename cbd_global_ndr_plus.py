@@ -652,25 +652,31 @@ def unzip_and_build_dem_vrt(
 
 def _report_watershed_count():
     try:
-        n = 20
+        start_time = time.time()
+        count_to_process_sql = '''
+            SELECT count(1) FROM work_status
+            WHERE status!=?'''
+        watersheds_left_to_process = _execute_sqlite(
+            count_to_process_sql, WORK_STATUS_DATABASE_PATH,
+            fetch='one', argument_list=[COMPLETE_STATUS])[0]
+        original_watershed_to_process_count = watersheds_left_to_process
         sleep_time = 15.0
         last_n_processed = []
-        watersheds_left = base_total
+        n_average = 20
         while True:
             time.sleep(sleep_time)
-            # TODO: fix this update by using what's in the table directly
-            sql_statement = 'SELECT * FROM global_variables'
-            watershed_basename_count_list = _execute_sqlite(
-                sql_statement, WORK_STATUS_DATABASE_PATH,
-                mode='read_only', execute='execute', fetch='all')
-            current_left = numpy.sum([x[1] for x in watershed_basename_count_list])
-            last_n_processed.append(watersheds_left-current_left)
-            watersheds_left = current_left
-            if len(last_n_processed) > n:
+            current_remaining_to_process = _execute_sqlite(
+                count_to_process_sql, WORK_STATUS_DATABASE_PATH,
+                argument_list=[COMPLETE_STATUS], fetch='one')[0]
+
+            last_n_processed.append(
+                watersheds_left_to_process-current_remaining_to_process)
+            watersheds_left_to_process = current_remaining_to_process
+            if len(last_n_processed) > n_average:
                 last_n_processed.pop(0)
             n_processed_per_sec = numpy.mean(last_n_processed) / sleep_time
             if n_processed_per_sec > 0:
-                seconds_left = watersheds_left / n_processed_per_sec
+                seconds_left = watersheds_left_to_process / n_processed_per_sec
             else:
                 seconds_left = 99999999999
             hours_left = int(seconds_left // 3600)
@@ -678,14 +684,13 @@ def _report_watershed_count():
             minutes_left = int(seconds_left // 60)
             seconds_left -= minutes_left*60
             REPORT_WATERSHED_LOGGER.info(
-                f'\n******\ntotal left: {watersheds_left}'
-                f'\ntotal completed: {base_total-watersheds_left}' +
-                '\nwatershed status:\n' + '\n'.join([
-                    str(v) for v in watershed_basename_count_list]) +
+                f'\n******\ntotal left: {watersheds_left_to_process}'
+                f'\ntotal completed: {original_watershed_to_process_count-watersheds_left_to_process}' +
                 f'\ntime left: {hours_left}:{minutes_left:02d}:{seconds_left:04.1f}')
 
     except Exception:
         REPORT_WATERSHED_LOGGER.exception('something bad happened')
+        raise
 
 
 def main():
@@ -809,7 +814,6 @@ def main():
                      SCHEDULED_STATUS) for (watershed_id, watershed_area)
                     in local_watershed_process_list],
                 mode='modify', execute='executemany')
-        watershed_feature = None
         watershed_layer = None
         watershed_vector = None
 
