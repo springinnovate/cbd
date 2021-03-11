@@ -8,6 +8,7 @@ import os
 import pathlib
 import subprocess
 import sqlite3
+import shutil
 import time
 import threading
 import zipfile
@@ -463,8 +464,7 @@ def stitch_worker(
             for worker in worker_list:
                 worker.join()
             for workspace_dir in workspace_list:
-                #shutil.rmtree(workspace_dir)
-                LOGGER.debug(f'would have removed {workspace_dir} but saving it')
+                shutil.rmtree(workspace_dir)
 
             for watershed_basename, count in watershed_process_count.items():
                 current_count = _execute_sqlite(
