@@ -770,7 +770,6 @@ def main():
         sql_statement = '''
             INSERT OR REPLACE INTO
                 global_variables(watershed_basename, watershed_count)
-                watershed_basename, watershed_count
             VALUES(?, ?);
         '''
         _execute_sqlite(
