@@ -6,6 +6,7 @@ import logging
 import multiprocessing
 import os
 import pathlib
+import re
 import subprocess
 import sqlite3
 import shutil
@@ -33,6 +34,7 @@ WORKSPACE_DIR = 'cbd_workspace'
 ECOSHARD_DIR = os.path.join(WORKSPACE_DIR, 'ecoshards')
 SCRUB_DIR = os.path.join(ECOSHARD_DIR, 'scrubbed_ecoshards')
 WORK_STATUS_DATABASE_PATH = os.path.join(WORKSPACE_DIR, 'work_status.db')
+SCHEDULED_STATUS = 'scheduled'  # use when scheduled but no work done
 COMPUTED_STATUS = 'computed'  # use when computed but not stitched
 COMPLETE_STATUS = 'complete'  # use when stitched and deleted
 USE_AG_LOAD_ID = 999
@@ -158,7 +160,7 @@ def _execute_sqlite(
         argument_list (list): ``execute == 'execute'`` then this list is passed
             to the internal sqlite3 ``execute`` call.
         mode (str): must be either 'read_only' or 'modify'.
-        execute (str): must be either 'execute' or 'script'.
+        execute (str): must be either 'execute', 'executemany,' or 'script'.
         fetch (str): if not ``None`` can be either 'all' or 'one'.
             If not None the result of a fetch will be returned by this
             function.
@@ -241,14 +243,11 @@ def _create_work_table_schema(database_path):
     sql_create_table_script = (
         """
         CREATE TABLE work_status (
+            scenario_id TEXT NOT NULL,
             watershed_id TEXT NOT NULL,
+            watershed_area FLOAT NOT NULL,
             status TEXT NOT NULL,
-            PRIMARY KEY (watershed_id)
-        );
-        CREATE TABLE global_variables (
-            watershed_basename TEXT NOT NULL,
-            watershed_count INT NOT NULL,
-            PRIMARY KEY (watershed_basename)
+            PRIMARY KEY (scenario_id, watershed_id)
         );
         """)
 
@@ -261,14 +260,15 @@ def _create_work_table_schema(database_path):
 def _set_work_status(database_path, watershed_id_status_list):
     try:
         sql_statement = '''
-            INSERT OR REPLACE INTO work_status(watershed_id, status)
-            VALUES(?, ?);
+            INSERT OR REPLACE INTO
+                work_status(scenario_id, watershed_id, status)
+            VALUES(?, ?, ?);
         '''
         _execute_sqlite(
             sql_statement, database_path, argument_list=watershed_id_status_list,
             mode='modify', execute='executemany')
     except Exception as e:
-        print(f'{e} happened on work status')
+        LOGGER.exception(f'{e} happened on work status')
         raise
 
 
@@ -418,7 +418,8 @@ def create_empty_wgs84_raster(cell_size, nodata, target_path):
 
 @retrying.retry(stop_max_attempt_number=100)
 def stitch_worker(
-        stitch_export_raster_path, stitch_modified_load_raster_path,
+        scenario_id, stitch_export_raster_path,
+        stitch_modified_load_raster_path,
         stitch_queue):
     """Take elements from stitch queue and stitch into target."""
     try:
@@ -433,7 +434,8 @@ def stitch_worker(
                 (export_raster_path, modified_load_raster_path,
                  workspace_dir, watershed_basename, watershed_id) = payload
                 watershed_process_count[watershed_basename] += 1
-                status_update_list.append((watershed_id, COMPLETE_STATUS))
+                status_update_list.append(
+                    (scenario_id, watershed_id, COMPLETE_STATUS))
 
                 export_raster_list.append((export_raster_path, 1))
                 modified_load_raster_list.append((modified_load_raster_path, 1))
@@ -474,22 +476,6 @@ def stitch_worker(
             for workspace_dir in workspace_list:
                 shutil.rmtree(workspace_dir)
 
-            for watershed_basename, count in watershed_process_count.items():
-                current_count = _execute_sqlite(
-                    '''SELECT watershed_count
-                    FROM global_variables
-                    WHERE watershed_basename=?''',
-                    WORK_STATUS_DATABASE_PATH, mode='modify',
-                    execute='execute', fetch='one',
-                    argument_list=[watershed_basename])[0]
-                _execute_sqlite(
-                    '''UPDATE global_variables
-                    SET watershed_count=?
-                    WHERE watershed_basename=?''',
-                    WORK_STATUS_DATABASE_PATH, mode='modify',
-                    execute='execute', fetch='one',
-                    argument_list=[current_count-count, watershed_basename])
-
             export_raster_list = []
             modified_load_raster_list = []
             workspace_list = []
@@ -514,7 +500,13 @@ def _create_watershed_id(watershed_path, watershed_fid):
     return (watershed_basename, f'{watershed_basename}_{watershed_fid}')
 
 
+def _split_watershed_id(watershed_id):
+    """Split into watershed basename and fid."""
+    re.match(r'^(.*)_(\d*)$', watershed_id).groups()
+
+
 def ndr_plus_and_stitch(
+        scenario_id,
         watershed_path, watershed_fid,
         target_cell_length_m,
         retention_length_m,
@@ -563,7 +555,7 @@ def ndr_plus_and_stitch(
         LOGGER.debug(f'{watershed_id} is done')
         _set_work_status(
             WORK_STATUS_DATABASE_PATH,
-            [(watershed_id, COMPUTED_STATUS)])
+            [(scenario_id, watershed_id, COMPUTED_STATUS)])
         stitch_queue.put(
             (target_export_raster_path, target_modified_load_raster_path,
              workspace_dir, watershed_basename, watershed_id))
@@ -637,7 +629,7 @@ def unzip_and_build_dem_vrt(
     LOGGER.info(f'all done building {target_vrt_path}')
 
 
-def _report_watershed_count(base_total):
+def _report_watershed_count():
     try:
         n = 20
         sleep_time = 15.0
@@ -645,6 +637,7 @@ def _report_watershed_count(base_total):
         watersheds_left = base_total
         while True:
             time.sleep(sleep_time)
+            # TODO: fix this update by using what's in the table directly
             sql_statement = 'SELECT * FROM global_variables'
             watershed_basename_count_list = _execute_sqlite(
                 sql_statement, WORK_STATUS_DATABASE_PATH,
@@ -725,6 +718,7 @@ def main():
     LOGGER.debug('waiting for downloads and data to construct')
     task_graph.join()
     invalid_value_task_list = []
+    LOGGER.debug('scheduling scrub of requested data')
     os.makedirs(SCRUB_DIR, exist_ok=True)
     for ecoshard_id_to_scrub in SCRUB_IDS:
         ecoshard_path = ecoshard_path_map[ecoshard_id_to_scrub]
@@ -737,7 +731,7 @@ def main():
         ecoshard_path_map[ecoshard_id_to_scrub] = scrub_path
     LOGGER.debug('wait for scrubbing to end')
     task_graph.join()
-    LOGGER.debug('done with downloads, check for invalid rasters')
+    LOGGER.debug('done with scrub, check for dirty rasters')
     checked_path_set = set()  # could have different id but same raster
     for ecoshard_id, ecoshard_path in ecoshard_path_map.items():
         if ecoshard_path in checked_path_set:
@@ -764,47 +758,43 @@ def main():
             f'invalid rasters at ' +
             '\n'.join([str(x) for x in invalid_raster_list]))
 
-    total_watersheds = 0
+    LOGGER.debug('schedule watershed work')
+    watershed_path_from_base = {}
     for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
         watershed_basename = os.path.basename(
             os.path.splitext(watershed_path)[0])
-        watersheds_to_process_count = 0
+        watershed_path_from_base[watershed_basename] = watershed_path
         watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
         watershed_layer = watershed_vector.GetLayer()
-        for watershed_feature in watershed_layer:
-            if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
-                continue
-            watersheds_to_process_count += 1
+        local_watershed_process_list = [
+            (_create_watershed_id(watershed_path, watershed_feature.GetFID()),
+             watershed_feature.GetGeometryRef().Area())
+            for watershed_feature in watershed_layer
+            if watershed_feature.GetGeometryRef().Area() <
+            AREA_DEG_THRESHOLD]
         sql_statement = '''
-            INSERT OR REPLACE INTO
-                global_variables(watershed_basename, watershed_count)
-            VALUES(?, ?);
+            INSERT OR IGNORE INTO
+                work_status(
+                    scenario_id, watershed_id, watershed_area, status)
+            VALUES(?, ?, ?, ?);
         '''
-        _execute_sqlite(
-            sql_statement, WORK_STATUS_DATABASE_PATH,
-            argument_list=[watershed_basename, watersheds_to_process_count],
-            mode='modify', execute='execute')
-        total_watersheds += watersheds_to_process_count
+        for scenario_id in SCENARIOS:
+            # schedule all the watersheds that are large enough per scenario
+            # for this particular watershed path
+            _execute_sqlite(
+                sql_statement, WORK_STATUS_DATABASE_PATH,
+                argument_list=[
+                    (scenario_id, watershed_id, watershed_area,
+                     SCHEDULED_STATUS) for (watershed_id, watershed_area)
+                    in local_watershed_process_list],
+                mode='modify', execute='executemany')
         watershed_feature = None
         watershed_layer = None
         watershed_vector = None
 
-    sql_statement = '''
-        SELECT watershed_id
-        FROM work_status
-        WHERE status != ?'''
-
-    completed_watershed_ids = _execute_sqlite(
-        sql_statement, WORK_STATUS_DATABASE_PATH,
-        mode='read_only', execute='execute', fetch='all',
-        argument_list=[COMPLETE_STATUS])
-    completed_watershed_id_set = {
-        x[0] for x in completed_watershed_ids}
-
     LOGGER.info(f'starting watershed status logger')
     report_watershed_thread = threading.Thread(
-        target=_report_watershed_count,
-        args=(total_watersheds,))
+        target=_report_watershed_count)
     report_watershed_thread.daemon = True
     report_watershed_thread.start()
 
@@ -812,6 +802,8 @@ def main():
     stitch_worker_list = []
     stitch_queue_list = []
     target_raster_list = []
+    # build a DEM bounding box so we don't send a job to a watershed that has
+    # no DEM
     dem_info = pygeoprocessing.get_raster_info(DEM_VRT_PATH)
     dem_bb_shapely = shapely.geometry.box(*dem_info['bounding_box'])
     dem_bb_shapely_prep = shapely.prepared.prep(dem_bb_shapely)
@@ -820,6 +812,7 @@ def main():
             ecoshard_path_map[scenario_vars['biophysical_table_id']],
             BIOPHYSICAL_TABLE_IDS[scenario_vars['biophysical_table_id']])
 
+        # make a stitcher for this scenario for export and modified load
         stitch_queue = manager.Queue()
         stitch_queue_list.append(stitch_queue)
         target_export_raster_path = os.path.join(
@@ -827,6 +820,7 @@ def main():
         target_modified_load_raster_path = os.path.join(
             WORKSPACE_DIR, f'{scenario_id}_{TARGET_CELL_LENGTH_M:.1f}_{ROUTING_ALGORITHM}_modified_load.tif')
 
+        # create the empty rasters if they don't exist
         if not os.path.exists(target_export_raster_path):
             create_empty_wgs84_raster(
                 TARGET_WGS84_LENGTH_DEG, -1, target_export_raster_path)
@@ -846,54 +840,50 @@ def main():
         stitch_worker_thread.start()
         stitch_worker_list.append(stitch_worker_thread)
 
-        for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
+        watersheds_to_process_query = '''
+            SELECT watershed_id FROM work_status
+            WHERE scenario_id=? AND status!=?
+            ORDER BY watershed_area DESC;'''
+
+        watershed_id_work_list = _execute_sqlite(
+            watersheds_to_process_query, WORK_STATUS_DATABASE_PATH,
+            argument_list=[scenario_id, COMPLETE_STATUS],
+            mode='read_only', execute='execute', fetch='all')
+
+        for watershed_id in watershed_id_work_list:
+            watershed_basename, watershed_fid = _split_watershed_id(
+                watershed_id)
             watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
-            watershed_layer = watershed_vector.GetLayer()
-            watershed_basename = os.path.splitext(os.path.basename(watershed_path))[0]
-            watersheds_scheduled = 0
-            for watershed_feature in watershed_layer:
-                if watershed_feature.GetGeometryRef().Area() < AREA_DEG_THRESHOLD:
-                    continue
-                watershed_geom = shapely.wkb.loads(
-                    watershed_feature.GetGeometryRef().ExportToWkb())
-
-                if not dem_bb_shapely_prep.intersects(watershed_geom):
-                    # outside of the DEM definition
-                    continue
-
-                watershed_fid = watershed_feature.GetFID()
-                watershed_id = f'{watershed_basename}_{watershed_fid}'
-                if watershed_id in completed_watershed_id_set:
-                    continue
-                local_workspace_dir = os.path.join(
-                    WORKSPACE_DIR, scenario_id, watershed_id)
-                local_export_raster_path = os.path.join(
-                    local_workspace_dir, os.path.basename(
-                        target_export_raster_path))
-                local_modified_load_raster_path = os.path.join(
-                    local_workspace_dir, os.path.basename(
-                        target_modified_load_raster_path))
-                task_graph.add_task(
-                    func=ndr_plus_and_stitch,
-                    args=(
-                        watershed_path, watershed_fid,
-                        TARGET_CELL_LENGTH_M,
-                        RETENTION_LENGTH_M,
-                        K_VAL,
-                        FLOW_THRESHOLD,
-                        ROUTING_ALGORITHM,
-                        DEM_VRT_PATH,
-                        ecoshard_path_map[scenario_vars['lulc_id']],
-                        ecoshard_path_map[scenario_vars['precip_id']],
-                        ecoshard_path_map[scenario_vars['fertilizer_id']],
-                        eff_n_lucode_map,
-                        load_n_lucode_map,
-                        local_export_raster_path,
-                        local_modified_load_raster_path,
-                        local_workspace_dir,
-                        stitch_queue),
-                    task_name=f'{watershed_basename}_{watershed_fid}')
-                watersheds_scheduled += 1
+            local_workspace_dir = os.path.join(
+                WORKSPACE_DIR, scenario_id, watershed_id)
+            local_export_raster_path = os.path.join(
+                local_workspace_dir, os.path.basename(
+                    target_export_raster_path))
+            local_modified_load_raster_path = os.path.join(
+                local_workspace_dir, os.path.basename(
+                    target_modified_load_raster_path))
+            task_graph.add_task(
+                func=ndr_plus_and_stitch,
+                args=(
+                    watershed_path_from_base[watershed_basename],
+                    watershed_fid,
+                    TARGET_CELL_LENGTH_M,
+                    RETENTION_LENGTH_M,
+                    K_VAL,
+                    FLOW_THRESHOLD,
+                    ROUTING_ALGORITHM,
+                    DEM_VRT_PATH,
+                    ecoshard_path_map[scenario_vars['lulc_id']],
+                    ecoshard_path_map[scenario_vars['precip_id']],
+                    ecoshard_path_map[scenario_vars['fertilizer_id']],
+                    eff_n_lucode_map,
+                    load_n_lucode_map,
+                    local_export_raster_path,
+                    local_modified_load_raster_path,
+                    local_workspace_dir,
+                    stitch_queue),
+                task_name=f'{watershed_basename}_{watershed_fid}')
+            watersheds_scheduled += 1
 
     LOGGER.debug(f'there are {watersheds_scheduled} scheduled of {total_watersheds} which is {100*watersheds_scheduled/total_watersheds:.2}% done, joining taskgraph')
     task_graph.join()
