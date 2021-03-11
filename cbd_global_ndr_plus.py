@@ -489,6 +489,27 @@ def stitch_worker(
             if payload is None:
                 stitch_queue.put(None)
                 break
+        if payload is None:
+            # all done, time to build overview and compress
+            LOGGER.debug(
+                f'building overviews and compressing results '
+                f'for {stitch_export_raster_path} and '
+                f'{stitch_modified_load_raster_path}')
+            build_overview_thread_list = []
+            for base_raster_path in [
+                    stitch_export_raster_path,
+                    stitch_modified_load_raster_path]:
+                compress_raster_path = os.path.join(
+                    WORKSPACE_DIR,
+                    f'compress_overview_{os.path.basename(base_raster_path)}')
+                build_overview_process = threading.Thread(
+                    target=compress_and_overview,
+                    args=(base_raster_path, compress_raster_path))
+                build_overview_process.start()
+                build_overview_thread_list.append(build_overview_process)
+            LOGGER.debug('joining the build overview threads')
+            for process in build_overview_thread_list:
+                process.join()
     except Exception:
         LOGGER.exception('something bad happened on ndr stitcher')
         raise
@@ -885,9 +906,8 @@ def main():
                     local_workspace_dir,
                     stitch_queue),
                 task_name=f'{watershed_basename}_{watershed_fid}')
-            watersheds_scheduled += 1
 
-    LOGGER.debug(f'there are {watersheds_scheduled} scheduled of {total_watersheds} which is {100*watersheds_scheduled/total_watersheds:.2}% done, joining taskgraph')
+    LOGGER.debug(f'watersheds are scheduled, joining taskgraph to wait for ndr_plus to complete on those')
     task_graph.join()
     task_graph.close()
     LOGGER.debug('ready to dump None to stitch queues')
@@ -896,21 +916,6 @@ def main():
     LOGGER.debug('joining stitch worker threads')
     for stitch_worker_thread in stitch_worker_list:
         stitch_worker_thread.join()
-
-    LOGGER.debug('building overviews and compressing results')
-    build_overview_list = []
-    for target_raster in target_raster_list:
-        compress_raster_path = os.path.join(
-            WORKSPACE_DIR,
-            f'compress_overview_{os.path.basename(target_raster)}')
-        build_overview_process = threading.Thread(
-            target=compress_and_overview,
-            args=(target_raster, compress_raster_path))
-        build_overview_process.start()
-        build_overview_list.append(build_overview_process)
-    LOGGER.debug('joining the build overview processes')
-    for process in build_overview_list:
-        process.join()
     LOGGER.debug('ALL DONE!')
 
 
