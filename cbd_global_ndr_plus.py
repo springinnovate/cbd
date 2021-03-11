@@ -862,6 +862,8 @@ def main():
             local_modified_load_raster_path = os.path.join(
                 local_workspace_dir, os.path.basename(
                     target_modified_load_raster_path))
+            # TODO: this is for debugging
+            continue
             task_graph.add_task(
                 func=ndr_plus_and_stitch,
                 args=(
