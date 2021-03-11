@@ -782,14 +782,15 @@ def main():
         watershed_layer = None
         watershed_vector = None
 
-    sql_statement = f'''
+    sql_statement = '''
         SELECT watershed_id
         FROM work_status
-        WHERE status != "{COMPLETE_STATUS}"'''
+        WHERE status != "?"'''
 
     completed_watershed_ids = _execute_sqlite(
         sql_statement, WORK_STATUS_DATABASE_PATH,
-        mode='read_only', execute='execute', fetch='all')
+        mode='read_only', execute='execute', fetch='all',
+        argument_list=[COMPLETE_STATUS])
     completed_watershed_id_set = {
         x[0] for x in completed_watershed_ids}
 
