@@ -416,6 +416,7 @@ def create_empty_wgs84_raster(cell_size, nodata, target_path):
     target_raster = None
 
 
+@retrying.retry(stop_max_attempt_number=100)
 def stitch_worker(
         stitch_export_raster_path, stitch_modified_load_raster_path,
         stitch_queue):
@@ -440,7 +441,11 @@ def stitch_worker(
 
                 for path in (export_raster_path, modified_load_raster_path):
                     if not os.path.exists(path):
-                        print(f'this path was to stich but does not exist: {path}')
+                        raise ValueError(
+                            f'this path {path} was to stitch into '
+                            f'{stitch_export_raster_path} or '
+                            f'{stitch_modified_load_raster_path} but does not '
+                            'exist: ')
 
             if len(workspace_list) < 100 and payload is not None:
                 continue
@@ -460,9 +465,12 @@ def stitch_worker(
                         'overlap_algorithm': 'etch',
                         'area_weight_m2_to_wgs84': True})
                 stitch_worker.start()
-                worker_list.append(stitch_worker)
-            for worker in worker_list:
+                worker_list.append((stitch_worker, raster_list))
+            for worker, raster_list in worker_list:
+                LOGGER.debug(f'waiting for this raster list to stitch: {raster_list}')
                 worker.join()
+                LOGGER.debug(f'done on that last stitch')
+            LOGGER.debug(f'removing {len(workspace_list)} workspaces')
             for workspace_dir in workspace_list:
                 shutil.rmtree(workspace_dir)
 
