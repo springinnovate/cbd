@@ -784,7 +784,7 @@ def main():
     sql_statement = '''
         SELECT watershed_id
         FROM work_status
-        WHERE status != "?"'''
+        WHERE status != ?'''
 
     completed_watershed_ids = _execute_sqlite(
         sql_statement, WORK_STATUS_DATABASE_PATH,
