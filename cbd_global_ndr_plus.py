@@ -890,7 +890,7 @@ def main():
         compress_raster_path = os.path.join(
             WORKSPACE_DIR,
             f'compress_overview_{os.path.basename(target_raster)}')
-        build_overview_process = multiprocessing.Process(
+        build_overview_process = threading.Thread(
             target=compress_and_overview,
             args=(target_raster, compress_raster_path))
         build_overview_process.start()
