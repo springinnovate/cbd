@@ -886,7 +886,8 @@ def main():
             argument_list=[scenario_id, COMPLETE_STATUS],
             mode='read_only', execute='execute', fetch='all')
 
-        for (watershed_id,) in watershed_id_work_list:
+        for watershed_id in watershed_id_work_list:
+            LOGGER.debug(f'watershed_id for work: {watershed_id}')
             watershed_basename, watershed_fid = _split_watershed_id(
                 watershed_id)
             watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
