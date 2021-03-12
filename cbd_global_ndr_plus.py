@@ -890,6 +890,8 @@ def main():
             LOGGER.debug(f'watershed_id for work: {watershed_id}')
             watershed_basename, watershed_fid = _split_watershed_id(
                 watershed_id)
+            watershed_path = os.path.join(
+                watershed_dir, f'{watershed_basename}.shp')
             watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
             local_workspace_dir = os.path.join(
                 WORKSPACE_DIR, scenario_id, watershed_id)
