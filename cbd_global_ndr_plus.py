@@ -522,7 +522,8 @@ def _create_watershed_id(watershed_path, watershed_fid):
 
 def _split_watershed_id(watershed_id):
     """Split into watershed basename and fid."""
-    return re.match(r'^(.*)_(\d*)$', watershed_id).groups()
+    basename, fid = re.match(r'^(.*)_(\d*)$', watershed_id).groups()
+    return (basename, int(fid))
 
 
 def ndr_plus_and_stitch(
