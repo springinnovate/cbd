@@ -259,9 +259,9 @@ def _create_work_table_schema(database_path):
 def _set_work_status(database_path, watershed_id_status_list):
     try:
         sql_statement = '''
-            INSERT OR REPLACE INTO
-                work_status(scenario_id, watershed_id, status)
-            VALUES(?, ?, ?);
+            UPDATE work_status
+            SET status=?
+            WHERE scenario_id=? AND watershed_id=?;
         '''
         _execute_sqlite(
             sql_statement, database_path,
@@ -435,7 +435,7 @@ def stitch_worker(
                  workspace_dir, watershed_basename, watershed_id) = payload
                 watershed_process_count[watershed_basename] += 1
                 status_update_list.append(
-                    (scenario_id, watershed_id, COMPLETE_STATUS))
+                    (COMPLETE_STATUS, scenario_id, watershed_id))
 
                 export_raster_list.append((export_raster_path, 1))
                 modified_load_raster_list.append((modified_load_raster_path, 1))
@@ -578,7 +578,7 @@ def ndr_plus_and_stitch(
         LOGGER.debug(f'{watershed_id} is done')
         _set_work_status(
             WORK_STATUS_DATABASE_PATH,
-            [(scenario_id, watershed_id, COMPUTED_STATUS)])
+            [(COMPUTED_STATUS, scenario_id, watershed_id)])
         stitch_queue.put(
             (target_export_raster_path, target_modified_load_raster_path,
              workspace_dir, watershed_basename, watershed_id))
@@ -588,7 +588,7 @@ def ndr_plus_and_stitch(
             f'skipping and logging the error in the database.')
         _set_work_status(
             WORK_STATUS_DATABASE_PATH,
-            [(scenario_id, watershed_id, f'exception happened: {e}')])
+            [(f'exception happened: {e}', scenario_id, watershed_id)])
 
 
 def load_biophysical_table(biophysical_table_path, lulc_field_id):
