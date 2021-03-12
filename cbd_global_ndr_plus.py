@@ -784,40 +784,47 @@ def main():
             f'invalid rasters at ' +
             '\n'.join([str(x) for x in invalid_raster_list]))
 
-    LOGGER.debug('schedule watershed work')
-    watershed_path_from_base = {}
-    for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
-        watershed_basename = os.path.basename(
-            os.path.splitext(watershed_path)[0])
-        watershed_path_from_base[watershed_basename] = watershed_path
-        watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
-        watershed_layer = watershed_vector.GetLayer()
-        local_watershed_process_list = [
-            (_create_watershed_id(
-                watershed_path, watershed_feature.GetFID())[1],
-             watershed_feature.GetGeometryRef().Area())
-            for watershed_feature in watershed_layer
-            if watershed_feature.GetGeometryRef().Area() <
-            AREA_DEG_THRESHOLD]
-        sql_statement = '''
-            INSERT OR IGNORE INTO
-                work_status(
-                    scenario_id, watershed_id, watershed_area, status)
-            VALUES(?, ?, ?, ?);
-        '''
-        for scenario_id in SCENARIOS:
-            # schedule all the watersheds that are large enough per scenario
-            # for this particular watershed path
-            argument_list = [
-                (scenario_id, watershed_id, watershed_area,
-                 SCHEDULED_STATUS) for (watershed_id, watershed_area)
-                in local_watershed_process_list]
-            _execute_sqlite(
-                sql_statement, WORK_STATUS_DATABASE_PATH,
-                argument_list=argument_list,
-                mode='modify', execute='executemany')
-        watershed_layer = None
-        watershed_vector = None
+    # TODO: only do this if there's no work scheduled, because otherwise
+    # it's already in there
+    work_status_count_sql = '''SELECT count(1) FROM work_status;'''
+    work_status_count = _execute_sqlite(
+        work_status_count_sql, WORK_STATUS_DATABASE_PATH,
+        mode='read_only', fetch='one')[0]
+    if work_status_count == 0:
+        LOGGER.debug('schedule watershed work')
+        watershed_path_from_base = {}
+        for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
+            watershed_basename = os.path.basename(
+                os.path.splitext(watershed_path)[0])
+            watershed_path_from_base[watershed_basename] = watershed_path
+            watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
+            watershed_layer = watershed_vector.GetLayer()
+            local_watershed_process_list = [
+                (_create_watershed_id(
+                    watershed_path, watershed_feature.GetFID())[1],
+                 watershed_feature.GetGeometryRef().Area())
+                for watershed_feature in watershed_layer
+                if watershed_feature.GetGeometryRef().Area() <
+                AREA_DEG_THRESHOLD]
+            schedule_watershed_sql = '''
+                INSERT INTO
+                    work_status(
+                        scenario_id, watershed_id, watershed_area, status)
+                VALUES(?, ?, ?, ?);
+            '''
+            for scenario_id in SCENARIOS:
+                # schedule all the watersheds that are large enough per scenario
+                # for this particular watershed path
+                argument_list = [
+                    (scenario_id, watershed_id, watershed_area,
+                     SCHEDULED_STATUS) for (watershed_id, watershed_area)
+                    in local_watershed_process_list]
+                _execute_sqlite(
+                    schedule_watershed_sql, WORK_STATUS_DATABASE_PATH,
+                    argument_list=argument_list,
+                    mode='modify', execute='executemany')
+            watershed_layer = None
+            watershed_vector = None
 
     LOGGER.info(f'starting watershed status logger')
     report_watershed_thread = threading.Thread(
