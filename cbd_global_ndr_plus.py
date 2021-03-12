@@ -886,7 +886,15 @@ def main():
             argument_list=[scenario_id, COMPLETE_STATUS],
             mode='read_only', execute='execute', fetch='all')
 
-        for (watershed_id,) in watershed_id_work_list:
+        last_time = time.time()
+        for watershed_index, (watershed_id,) in enumerate(
+                watershed_id_work_list):
+            if time.time()-last_time > 15:
+                LOGGER.debug(
+                    f'schedulding {watershed_index} of '
+                    f'{len(watershed_id_work_list)} '
+                    f'{100*watershed_index/(len(watershed_id_work_list)-1):.1f}% complete')
+                last_time = time.time()
             watershed_basename, watershed_fid = _split_watershed_id(
                 watershed_id)
             watershed_path = os.path.join(
