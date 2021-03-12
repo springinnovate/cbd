@@ -807,12 +807,14 @@ def main():
         for scenario_id in SCENARIOS:
             # schedule all the watersheds that are large enough per scenario
             # for this particular watershed path
+            argument_list = [
+                (scenario_id, watershed_id, watershed_area,
+                 SCHEDULED_STATUS) for (watershed_id, watershed_area)
+                in local_watershed_process_list]
+            LOGGER.debug(f'argument_list: {argument_list}')
             _execute_sqlite(
                 sql_statement, WORK_STATUS_DATABASE_PATH,
-                argument_list=[
-                    (scenario_id, int(watershed_id), watershed_area,
-                     SCHEDULED_STATUS) for (watershed_id, watershed_area)
-                    in local_watershed_process_list],
+                argument_list=argument_list,
                 mode='modify', execute='executemany')
         watershed_layer = None
         watershed_vector = None
