@@ -216,7 +216,9 @@ def _execute_sqlite(
             f'{sqlite_command}')
         raise
     except Exception:
-        LOGGER.exception('Exception on _execute_sqlite: %s', sqlite_command)
+        LOGGER.exception(
+            f'Exception on _execute_sqlite: {sqlite_command}\n'
+            f'  and the argument list is: {argument_list}')
         raise
     finally:
         if cursor is not None:
