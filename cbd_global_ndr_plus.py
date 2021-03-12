@@ -907,6 +907,7 @@ def main():
             task_graph.add_task(
                 func=ndr_plus_and_stitch,
                 args=(
+                    scenario_id,
                     watershed_path_from_base[watershed_basename],
                     watershed_fid,
                     TARGET_CELL_LENGTH_M,
