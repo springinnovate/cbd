@@ -508,6 +508,7 @@ def stitch_worker(
             LOGGER.debug('joining the build overview threads')
             for process in build_overview_thread_list:
                 process.join()
+            LOGGER.debug(f'all done stitching for {scenario_id}')
     except Exception:
         LOGGER.exception('something bad happened on ndr stitcher')
         raise
@@ -578,9 +579,13 @@ def ndr_plus_and_stitch(
         stitch_queue.put(
             (target_export_raster_path, target_modified_load_raster_path,
              workspace_dir, watershed_basename, watershed_id))
-    except Exception:
+    except Exception as e:
         LOGGER.exception(
-            f'this exception happened on {watershed_path} {watershed_fid} but skipping with no problem')
+            f'this exception happened on {watershed_path} {watershed_fid}, '
+            f'skipping and logging the error in the database.')
+        _set_work_status(
+            WORK_STATUS_DATABASE_PATH,
+            [(scenario_id, watershed_id, f'exception happened: {e}')])
 
 
 def load_biophysical_table(biophysical_table_path, lulc_field_id):
@@ -782,12 +787,6 @@ def main():
             f'invalid rasters at ' +
             '\n'.join([str(x) for x in invalid_raster_list]))
 
-    # TODO: only do this if there's no work scheduled, because otherwise
-    # it's already in there
-    work_status_count_sql = '''SELECT count(1) FROM work_status;'''
-    work_status_count = _execute_sqlite(
-        work_status_count_sql, WORK_STATUS_DATABASE_PATH,
-        mode='read_only', fetch='one')[0]
     LOGGER.debug('schedule watershed work')
     watershed_path_from_base = {}
     for watershed_path in glob.glob(os.path.join(watershed_dir, '*.shp')):
@@ -803,8 +802,9 @@ def main():
             for watershed_feature in watershed_layer
             if watershed_feature.GetGeometryRef().Area() >
             AREA_DEG_THRESHOLD]
+        # The IGNORE is if it's already in there, keep the status as whatever
         schedule_watershed_sql = '''
-            INSERT INTO
+            INSERT OR IGNORE INTO
                 work_status(
                     scenario_id, watershed_id, watershed_area, status)
             VALUES(?, ?, ?, ?);
