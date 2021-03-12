@@ -793,7 +793,8 @@ def main():
         watershed_vector = gdal.OpenEx(watershed_path, gdal.OF_VECTOR)
         watershed_layer = watershed_vector.GetLayer()
         local_watershed_process_list = [
-            (_create_watershed_id(watershed_path, watershed_feature.GetFID()),
+            (_create_watershed_id(
+                watershed_path, watershed_feature.GetFID())[1],
              watershed_feature.GetGeometryRef().Area())
             for watershed_feature in watershed_layer
             if watershed_feature.GetGeometryRef().Area() <
