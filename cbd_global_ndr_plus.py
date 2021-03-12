@@ -812,7 +812,6 @@ def main():
                 (scenario_id, watershed_id, watershed_area,
                  SCHEDULED_STATUS) for (watershed_id, watershed_area)
                 in local_watershed_process_list]
-            LOGGER.debug(f'argument_list: {argument_list}')
             _execute_sqlite(
                 sql_statement, WORK_STATUS_DATABASE_PATH,
                 argument_list=argument_list,
