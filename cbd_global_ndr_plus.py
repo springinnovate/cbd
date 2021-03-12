@@ -266,7 +266,7 @@ def _set_work_status(database_path, watershed_id_status_list):
             argument_list=watershed_id_status_list,
             mode='modify', execute='executemany')
     except Exception as e:
-        LOGGER.exception(f'{e} happened on work status')
+        LOGGER.exception(f'{e} happened on work status with status list of {watershed_id_status_list}')
         raise
 
 
