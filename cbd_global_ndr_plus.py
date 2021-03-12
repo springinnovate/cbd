@@ -175,9 +175,6 @@ def _execute_sqlite(
         if mode == 'read_only':
             ro_uri = r'%s?mode=ro' % pathlib.Path(
                 os.path.abspath(database_path)).as_uri()
-            LOGGER.debug(
-                '%s exists: %s', ro_uri, os.path.exists(os.path.abspath(
-                    database_path)))
             connection = sqlite3.connect(ro_uri, uri=True)
         elif mode == 'modify':
             connection = sqlite3.connect(database_path)
