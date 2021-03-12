@@ -265,7 +265,8 @@ def _set_work_status(database_path, watershed_id_status_list):
             VALUES(?, ?, ?);
         '''
         _execute_sqlite(
-            sql_statement, database_path, argument_list=watershed_id_status_list,
+            sql_statement, database_path,
+            argument_list=watershed_id_status_list,
             mode='modify', execute='executemany')
     except Exception as e:
         LOGGER.exception(f'{e} happened on work status')
@@ -868,6 +869,7 @@ def main():
         stitch_worker_thread = threading.Thread(
             target=stitch_worker,
             args=(
+                scenario_id,
                 target_export_raster_path, target_modified_load_raster_path,
                 stitch_queue))
 
