@@ -904,8 +904,6 @@ def main():
             local_modified_load_raster_path = os.path.join(
                 local_workspace_dir, os.path.basename(
                     target_modified_load_raster_path))
-            # TODO: this is for debugging to skip the actual plus call
-            continue
             task_graph.add_task(
                 func=ndr_plus_and_stitch,
                 args=(
@@ -928,7 +926,9 @@ def main():
                     stitch_queue),
                 task_name=f'{watershed_basename}_{watershed_fid}')
 
-    LOGGER.debug(f'watersheds are scheduled, joining taskgraph to wait for ndr_plus to complete on those')
+    LOGGER.debug(
+        'watersheds are scheduled, joining taskgraph to wait for ndr_plus to '
+        'complete on those')
     task_graph.join()
     task_graph.close()
     LOGGER.debug('ready to dump None to stitch queues')
