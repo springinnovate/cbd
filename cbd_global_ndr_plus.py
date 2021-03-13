@@ -872,9 +872,9 @@ def main():
         stitch_worker_thread = threading.Thread(
             target=stitch_worker,
             args=(
-                scenario_id,
-                target_export_raster_path, target_modified_load_raster_path,
-                stitch_queue, args.watersheds is None))
+                scenario_id, target_export_raster_path,
+                target_modified_load_raster_path, stitch_queue,
+                args.watersheds is None))
         stitch_worker_thread.start()
         stitch_worker_list.append(stitch_worker_thread)
 
@@ -885,8 +885,7 @@ def main():
 
         if args.watersheds:
             watershed_id_work_list = [
-                f'%s_%s' % watershed.split(',')
-                for watershed in args.watersheds]
+                watershed_id for watershed_id in args.watersheds]
         else:
             watershed_id_work_list = _execute_sqlite(
                 watersheds_to_process_query, WORK_STATUS_DATABASE_PATH,
