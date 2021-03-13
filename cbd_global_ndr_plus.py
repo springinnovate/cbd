@@ -420,7 +420,7 @@ def create_empty_wgs84_raster(cell_size, nodata, target_path):
 def stitch_worker(
         scenario_id, stitch_export_raster_path,
         stitch_modified_load_raster_path,
-        stitch_queue):
+        stitch_queue, remove_workspaces):
     """Take elements from stitch queue and stitch into target."""
     try:
         export_raster_list = []
@@ -472,9 +472,10 @@ def stitch_worker(
                 LOGGER.debug(f'waiting for this raster list to stitch: {raster_list}')
                 worker.join()
                 LOGGER.debug(f'done on that last stitch')
-            LOGGER.debug(f'removing {len(workspace_list)} workspaces')
-            for workspace_dir in workspace_list:
-                shutil.rmtree(workspace_dir)
+            if remove_workspaces:
+                LOGGER.debug(f'removing {len(workspace_list)} workspaces')
+                for workspace_dir in workspace_list:
+                    shutil.rmtree(workspace_dir)
 
             export_raster_list = []
             modified_load_raster_list = []
@@ -705,6 +706,9 @@ def main():
     parser.add_argument(
         '--n_workers', type=int, default=multiprocessing.cpu_count(),
         help='number of workers for Taskgraph.')
+    parser.add_argument(
+        '--watersheds', type=str, nargs='+',
+        help='comma separated list of watershed-basename,fid to simulate')
     args = parser.parse_args()
     LOGGER.debug('starting script')
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
@@ -870,8 +874,7 @@ def main():
             args=(
                 scenario_id,
                 target_export_raster_path, target_modified_load_raster_path,
-                stitch_queue))
-
+                stitch_queue, args.watersheds is None))
         stitch_worker_thread.start()
         stitch_worker_list.append(stitch_worker_thread)
 
@@ -880,10 +883,15 @@ def main():
             WHERE scenario_id=? AND status!=?
             ORDER BY watershed_area DESC;'''
 
-        watershed_id_work_list = _execute_sqlite(
-            watersheds_to_process_query, WORK_STATUS_DATABASE_PATH,
-            argument_list=[scenario_id, COMPLETE_STATUS],
-            mode='read_only', execute='execute', fetch='all')
+        if args.watersheds:
+            watershed_id_work_list = [
+                f'%s_%s' % watershed.split(',')
+                for watershed in args.watersheds]
+        else:
+            watershed_id_work_list = _execute_sqlite(
+                watersheds_to_process_query, WORK_STATUS_DATABASE_PATH,
+                argument_list=[scenario_id, COMPLETE_STATUS],
+                mode='read_only', execute='execute', fetch='all')
 
         last_time = time.time()
         for watershed_index, (watershed_id,) in enumerate(
