@@ -884,8 +884,9 @@ def main():
             ORDER BY watershed_area DESC;'''
 
         if args.watersheds:
+            # make it it a tuple so it matches the sqlite query
             watershed_id_work_list = [
-                watershed_id for watershed_id in args.watersheds]
+                (watershed_id,) for watershed_id in args.watersheds]
         else:
             watershed_id_work_list = _execute_sqlite(
                 watersheds_to_process_query, WORK_STATUS_DATABASE_PATH,
