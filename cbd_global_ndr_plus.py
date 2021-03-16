@@ -57,6 +57,7 @@ TARGET_CELL_LENGTH_M = 300
 FLOW_THRESHOLD = int(500**2*90 / TARGET_CELL_LENGTH_M**2)
 ROUTING_ALGORITHM = 'D8'
 TARGET_WGS84_LENGTH_DEG = 10/3600
+BASE_WGS84_LENGTH_DEG = 10/3600/2
 AREA_DEG_THRESHOLD = 0.000016 * 10  # this is 10 times larger than hydrosheds 1 "pixel" watersheds
 
 BIOPHYSICAL_TABLE_IDS = {
@@ -500,12 +501,17 @@ def stitch_worker(
             for base_raster_path in [
                     stitch_export_raster_path,
                     stitch_modified_load_raster_path]:
-                compress_raster_path = os.path.join(
+                upsample_raster_path = os.path.join(
                     WORKSPACE_DIR,
-                    f'compress_overview_{os.path.basename(base_raster_path)}')
+                    f'upsample_{os.path.basename(base_raster_path)}')
+                compressed_raster_path = os.path.join(
+                    WORKSPACE_DIR,
+                    f'compressed_{os.path.basename(base_raster_path)}')
                 build_overview_process = threading.Thread(
-                    target=compress_and_overview,
-                    args=(base_raster_path, compress_raster_path))
+                    target=upsample_compress_and_overview,
+                    args=(
+                        base_raster_path, upsample_raster_path,
+                        compressed_raster_path))
                 build_overview_process.start()
                 build_overview_thread_list.append(build_overview_process)
             LOGGER.debug('joining the build overview threads')
@@ -861,10 +867,10 @@ def main():
         # create the empty rasters if they don't exist
         if not os.path.exists(target_export_raster_path):
             create_empty_wgs84_raster(
-                TARGET_WGS84_LENGTH_DEG, -1, target_export_raster_path)
+                BASE_WGS84_LENGTH_DEG, -1, target_export_raster_path)
         if not os.path.exists(target_modified_load_raster_path):
             create_empty_wgs84_raster(
-                TARGET_WGS84_LENGTH_DEG, -1, target_modified_load_raster_path)
+                BASE_WGS84_LENGTH_DEG, -1, target_modified_load_raster_path)
 
         target_raster_list.extend(
             [target_export_raster_path, target_modified_load_raster_path])
@@ -949,12 +955,16 @@ def main():
     LOGGER.debug('joining stitch worker threads')
     for stitch_worker_thread in stitch_worker_list:
         stitch_worker_thread.join()
+    LOGGER.debug('resampling up to half the size')
     LOGGER.debug('ALL DONE!')
 
 
-def compress_and_overview(base_raster_path, target_raster_path):
+def upsample_compress_and_overview(
+        base_raster_path, upsampled_raster_path, target_raster_path):
     """Compress and overview base to raster."""
-    ecoshard.compress_raster(base_raster_path, target_raster_path)
+    ecoshard.convolve_layer(
+        base_raster_path, 2, 'add', upsampled_raster_path)
+    ecoshard.compress_raster(upsampled_raster_path, target_raster_path)
     ecoshard.build_overviews(target_raster_path)
 
 
