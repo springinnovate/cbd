@@ -963,7 +963,7 @@ def upsample_compress_and_overview(
         base_raster_path, upsampled_raster_path, target_raster_path):
     """Compress and overview base to raster."""
     ecoshard.convolve_layer(
-        base_raster_path, 2, 'add', upsampled_raster_path)
+        base_raster_path, 2, 'sum', upsampled_raster_path)
     ecoshard.compress_raster(upsampled_raster_path, target_raster_path)
     ecoshard.build_overviews(target_raster_path)
 
