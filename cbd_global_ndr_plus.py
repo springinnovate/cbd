@@ -490,7 +490,7 @@ def stitch_worker(
             if payload is None:
                 stitch_queue.put(None)
                 break
-        if payload is None:
+        if payload is None and remove_workspaces is not None:
             # all done, time to build overview and compress
             LOGGER.debug(
                 f'building overviews and compressing results '
